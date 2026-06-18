@@ -1,0 +1,42 @@
+{
+  "name": "current",
+  "productName": "Current",
+  "version": "1.0.0",
+  "description": "Pull tracks from YouTube, YouTube Music, and SoundCloud into a local library.",
+  "main": "main.js",
+  "author": "You",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "dist": "electron-builder --mac"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "@electron/rebuild": "^3.6.0"
+  },
+  "build": {
+    "appId": "com.yourdomain.current",
+    "productName": "Current",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": ["dmg", "zip"],
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Current"
+    }
+  }
+}
