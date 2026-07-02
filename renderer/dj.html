@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Current DJ Interface</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .dj-container {
+      display: flex;
+      gap: 16px;
+      padding: 20px;
+      height: calc(100vh - 90px);
+    }
+
+    .deck {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .deck-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+    }
+
+    .deck-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .deck-status {
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .deck-status.playing {
+      background: rgba(94, 234, 212, 0.2);
+      color: var(--accent-cyan);
+    }
+
+    .track-info {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .track-title {
+      font-size: 15px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .track-meta {
+      font-size: 11px;
+      color: var(--text-faint);
+      font-family: 'SF Mono', monospace;
+    }
+
+    .waveform-placeholder {
+      flex: 1;
+      min-height: 120px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-faint);
+      font-size: 12px;
+      font-family: 'SF Mono', monospace;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 12px;
+      padding: 12px 16px;
+    }
+
+    .control-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-label {
+      font-size: 10px;
+      color: var(--text-faint);
+      font-family: 'SF Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-cyan), #9be9ff);
+      border-radius: 999px;
+      transition: width 0.1s linear;
+    }
+
+    .volume-bar {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .volume-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-ytmusic), var(--accent-cyan));
+      border-radius: 999px;
+      transition: width 0.1s linear;
+    }
+
+    .mixer-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 200px;
+    }
+
+    .mixer-title {
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 16px;
+      text-align: center;
+    }
+
+    .crossfader-container {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .crossfader-label {
+      font-size: 10px;
+      color: var(--text-faint);
+      font-family: 'SF Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: center;
+    }
+
+    .crossfader {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .crossfader-fill {
+      height: 100%;
+      width: 50%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-ytmusic));
+      border-radius: 999px;
+    }
+
+    .connection-status {
+      position: fixed;
+      top: 40px;
+      right: 22px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      background: rgba(255, 107, 129, 0.2);
+      color: var(--accent-youtube);
+      border: 1px solid rgba(255, 107, 129, 0.3);
+    }
+
+    .connection-status.connected {
+      background: rgba(52, 211, 153, 0.2);
+      color: #34d399;
+      border-color: rgba(52, 211, 153, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="titlebar-spacer"></div>
+  
+  <div style="position: fixed; top: 40px; left: 22px;">
+    <button id="library-view-btn" style="padding: 6px 12px; border: none; border-radius: 999px; background: var(--glass-fill-strong); color: var(--text-primary); font-size: 11px; cursor: pointer;">← Back to Library</button>
+  </div>
+  
+  <div class="connection-status" id="connection-status">Mixxx: Disconnected</div>
+  
+  <div class="dj-container">
+    <!-- Deck 1 -->
+    <div class="deck">
+      <div class="deck-header glass">
+        <span class="deck-title">Deck A</span>
+        <span class="deck-status" id="deck1-status">Stopped</span>
+      </div>
+      
+      <div class="track-info glass">
+        <div class="track-title" id="deck1-title">No track loaded</div>
+        <div class="track-meta" id="deck1-meta">--:-- / --:--</div>
+      </div>
+      
+      <div class="waveform-placeholder glass">
+        Waveform visualization
+      </div>
+      
+      <div class="controls-row glass">
+        <div class="control-group">
+          <span class="control-label">Play Position</span>
+          <div class="progress-bar">
+            <div class="progress-fill" id="deck1-progress"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="control-label">Volume</span>
+          <div class="volume-bar">
+            <div class="volume-fill" id="deck1-volume"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Mixer -->
+    <div class="mixer-section">
+      <div class="mixer-title glass">Mixer</div>
+      
+      <div class="crossfader-container glass">
+        <span class="crossfader-label">Crossfader</span>
+        <div class="crossfader">
+          <div class="crossfader-fill" id="crossfader"></div>
+        </div>
+      </div>
+      
+      <div class="crossfader-container glass">
+        <span class="crossfader-label">Master Volume</span>
+        <div class="volume-bar">
+          <div class="volume-fill" id="master-volume" style="width: 75%;"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Deck 2 -->
+    <div class="deck">
+      <div class="deck-header glass">
+        <span class="deck-title">Deck B</span>
+        <span class="deck-status" id="deck2-status">Stopped</span>
+      </div>
+      
+      <div class="track-info glass">
+        <div class="track-title" id="deck2-title">No track loaded</div>
+        <div class="track-meta" id="deck2-meta">--:-- / --:--</div>
+      </div>
+      
+      <div class="waveform-placeholder glass">
+        Waveform visualization
+      </div>
+      
+      <div class="controls-row glass">
+        <div class="control-group">
+          <span class="control-label">Play Position</span>
+          <div class="progress-bar">
+            <div class="progress-fill" id="deck2-progress"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <span class="control-label">Volume</span>
+          <div class="volume-bar">
+            <div class="volume-fill" id="deck2-volume"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="dj.js"></script>
+</body>
+</html>

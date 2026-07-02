@@ -15,6 +15,7 @@ const libraryPathEl = document.getElementById('library-path');
 const player      = document.getElementById('player');
 const npTitle     = document.getElementById('np-title');
 const npMeta      = document.getElementById('np-meta');
+const djViewBtn   = document.getElementById('dj-view-btn');
 
 // Edit Modal elements
 const editModal        = document.getElementById('edit-modal');
@@ -475,6 +476,11 @@ editModal.addEventListener('click', (e) => {
   if (e.target === editModal) {
     closeEditModal();
   }
+});
+
+// DJ view navigation
+djViewBtn.addEventListener('click', () => {
+  window.current.switchView('dj');
 });
 
 loadLibrary();

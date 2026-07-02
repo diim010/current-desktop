@@ -16,7 +16,13 @@ contextBridge.exposeInMainWorld('current', {
   setLibraryFolder: (dir) => ipcRenderer.invoke('set-library-folder', dir),
   getConfig: () => ipcRenderer.invoke('get-config'),
   setConfig: (partial) => ipcRenderer.invoke('set-config', partial),
+  // OSC APIs
+  oscGetDeckState: (deckNum) => ipcRenderer.invoke('osc-get-deck-state', deckNum),
+  oscGetAllDeckStates: () => ipcRenderer.invoke('osc-get-all-deck-states'),
+  // View switching
+  switchView: (view) => ipcRenderer.invoke('switch-view', view),
   // Event listeners
   onJobUpdate: (cb) => ipcRenderer.on('job-update', (event, payload) => cb(payload)),
   onLibraryPathChanged: (cb) => ipcRenderer.on('library-path-changed', (event, path) => cb(path)),
+  onOscDeckUpdate: (cb) => ipcRenderer.on('osc-deck-update', (event, data) => cb(data)),
 });

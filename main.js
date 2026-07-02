@@ -6,9 +6,11 @@ const { randomUUID } = require('crypto');
 const db = require('./src/db');
 const { detectSource, fetchInfo, downloadAudio, searchYoutube } = require('./src/ytdlp');
 const config = require('./src/config');
+const OSCServer = require('./src/osc-server');
 
 let mainWindow;
 let database;
+let oscServer;
 
 const SOURCES = ['youtube', 'youtube-music', 'soundcloud'];
 
@@ -42,6 +44,11 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
+function switchView(view) {
+  const viewFile = view === 'dj' ? 'dj.html' : 'index.html';
+  mainWindow.loadFile(path.join(__dirname, 'renderer', viewFile));
+}
+
 function buildMenu() {
   const template = [
     {
@@ -72,6 +79,9 @@ function buildMenu() {
         },
         { label: 'Settings', click: () => { createSettingsWindow(); } },
         { type: 'separator' },
+        { label: 'Library View', click: () => { switchView('library'); } },
+        { label: 'DJ View', click: () => { switchView('dj'); } },
+        { type: 'separator' },
         { role: 'quit' },
       ],
     },
@@ -99,8 +109,13 @@ app.whenReady().then(() => {
   const libPath = libraryRoot();
   database = db.initDB(libPath);
   console.log('[App] Initialized DB at', libPath);
+  
   buildMenu();
   createWindow();
+  
+  // Start OSC server for Mixxx communication after window is created
+  oscServer = new OSCServer(7777, mainWindow);
+  oscServer.start();
   // Settings window placeholder
   let settingsWindow = null;
 function createSettingsWindow() {
@@ -129,6 +144,9 @@ function createSettingsWindow() {
 });
 
 app.on('window-all-closed', () => {
+  if (oscServer) {
+    oscServer.stop();
+  }
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -287,4 +305,24 @@ ipcMain.handle('reveal-in-finder', (event, filepath) => {
 
 ipcMain.handle('open-library-folder', () => {
   shell.openPath(libraryRoot());
+});
+
+// OSC-related IPC handlers
+ipcMain.handle('osc-get-deck-state', (event, deckNum) => {
+  if (oscServer) {
+    return oscServer.getDeckState(deckNum);
+  }
+  return null;
+});
+
+ipcMain.handle('osc-get-all-deck-states', () => {
+  if (oscServer) {
+    return oscServer.getAllDeckStates();
+  }
+  return null;
+});
+
+// View switching
+ipcMain.handle('switch-view', (event, view) => {
+  switchView(view);
 });
