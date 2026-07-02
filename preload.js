@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('current', {
   // Core APIs
   queueDownload: (url) => ipcRenderer.invoke('queue-download', url),
+  searchYoutube: (query) => ipcRenderer.invoke('search-youtube', query),
   getTracks: (opts) => ipcRenderer.invoke('get-tracks', opts),
   allTags: () => ipcRenderer.invoke('all-tags'),
   setTags: (id, tags) => ipcRenderer.invoke('set-tags', { id, tags }),

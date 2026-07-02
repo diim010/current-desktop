@@ -11,6 +11,7 @@ const queueEl     = document.getElementById('queue');
 const errorBanner = document.getElementById('error-banner');
 const fileListEl  = document.getElementById('file-list');
 const tabs        = document.querySelectorAll('.tab');
+const predictionsDropdown = document.getElementById('predictions-dropdown');
 const libraryPathEl = document.getElementById('library-path');
 const player      = document.getElementById('player');
 const npTitle     = document.getElementById('np-title');
@@ -246,13 +247,103 @@ input.addEventListener('input', () => {
       activeQuery = '';
       loadLibrary();
     }
+    predictionsDropdown.classList.remove('show');
+    predictionsDropdown.innerHTML = '';
   } else {
     pullBtn.classList.remove('visible');
     clearTimeout(searchTimer);
+    
+    if (!val) {
+      activeQuery = '';
+      loadLibrary();
+      predictionsDropdown.classList.remove('show');
+      predictionsDropdown.innerHTML = '';
+      return;
+    }
+
     searchTimer = setTimeout(() => {
       activeQuery = val;
       loadLibrary();
-    }, 200);
+      fetchYoutubePredictions(val);
+    }, 300);
+  }
+});
+
+let currentSearchQuery = '';
+
+async function fetchYoutubePredictions(query) {
+  currentSearchQuery = query;
+  predictionsDropdown.innerHTML = `<div class="prediction-loading">Searching YouTube...</div>`;
+  predictionsDropdown.classList.add('show');
+  
+  try {
+    const results = await window.current.searchYoutube(query);
+    if (currentSearchQuery !== query) return;
+    
+    if (!results || !results.length) {
+      predictionsDropdown.innerHTML = `<div class="prediction-loading">No YouTube results found.</div>`;
+      return;
+    }
+    
+    predictionsDropdown.innerHTML = results.map(item => {
+      const thumb = item.thumbnail ? `style="background-image:url('${item.thumbnail}')"` : '';
+      const durationStr = item.duration ? fmtDuration(item.duration) : '';
+      const meta = [item.uploader, durationStr].filter(Boolean).join(' · ');
+      return `
+        <div class="prediction-row" data-url="${escapeHtml(item.url)}">
+          <div class="prediction-thumb" ${thumb}></div>
+          <div class="prediction-info">
+            <div class="prediction-title">${escapeHtml(item.title)}</div>
+            <div class="prediction-meta">${escapeHtml(meta)}</div>
+          </div>
+          <div class="prediction-actions">
+            <button class="prediction-pull-btn">Pull</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    predictionsDropdown.querySelectorAll('.prediction-row').forEach(row => {
+      const url = row.dataset.url;
+      const rowPullBtn = row.querySelector('.prediction-pull-btn');
+      
+      rowPullBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rowPullBtn.disabled = true;
+        rowPullBtn.textContent = 'Pulling...';
+        
+        window.current.queueDownload(url)
+          .then(({ id, source }) => {
+            jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: null });
+            renderQueue();
+            predictionsDropdown.classList.remove('show');
+            predictionsDropdown.innerHTML = '';
+            input.value = '';
+          })
+          .catch(err => {
+            showError(err.message);
+            rowPullBtn.disabled = false;
+            rowPullBtn.textContent = 'Pull';
+          });
+      });
+      
+      row.addEventListener('click', () => {
+        input.value = url;
+        predictionsDropdown.classList.remove('show');
+        predictionsDropdown.innerHTML = '';
+        input.dispatchEvent(new Event('input'));
+      });
+    });
+  } catch (err) {
+    if (currentSearchQuery === query) {
+      predictionsDropdown.innerHTML = `<div class="prediction-loading">YouTube search failed.</div>`;
+    }
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#universal-form') && !e.target.closest('#predictions-dropdown')) {
+    predictionsDropdown.classList.remove('show');
   }
 });
 

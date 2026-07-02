@@ -110,4 +110,44 @@ function downloadAudio(url, outDir, onProgress, ytdlpPath = YTDLP_PATH) {
   });
 }
 
-module.exports = { detectSource, fetchInfo, downloadAudio };
+function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ytdlpPath, [
+      `ytsearch5:${query}`,
+      '--dump-json',
+      '--no-playlist',
+      '--no-warnings'
+    ]);
+    let out = '';
+    let err = '';
+    proc.stdout.on('data', (d) => (out += d.toString()));
+    proc.stderr.on('data', (d) => (err += d.toString()));
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      try {
+        const results = [];
+        const lines = out.trim().split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const item = JSON.parse(line);
+            results.push({
+              id: item.id,
+              title: item.title,
+              url: item.webpage_url,
+              uploader: item.uploader,
+              duration: item.duration,
+              thumbnail: item.thumbnail || (item.thumbnails && item.thumbnails.length ? item.thumbnails[0].url : null),
+            });
+          } catch (e) {
+            // ignore malformed line
+          }
+        }
+        resolve(results);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+module.exports = { detectSource, fetchInfo, downloadAudio, searchYoutube };

@@ -15,38 +15,19 @@
     <h1>Current</h1>
     <p>Pulling into <span id="library-path" class="clickable-path" title="Click to choose another folder…">~/Music/Current</span></p>
   </div>
-  <div class="settings">
-    <button id="settings-btn" class="settings-button">Settings</button>
-  </div>
 
-  <!-- Settings Modal -->
-  <div class="modal-overlay" id="settings-modal">
-    <div class="glass modal-card">
-      <h3>Settings</h3>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Library Folder</label>
-          <div id="settings-library-path" class="clickable-path" title="Click to choose another folder…">Loading…</div>
-        </div>
-        <div class="form-group">
-          <label>Theme</label>
-          <select id="settings-theme-select">
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button id="settings-cancel-btn">Cancel</button>
-        <button id="settings-save-btn">Save</button>
-      </div>
-    </div>
-  </div>
 
   <form id="universal-form" class="glass composer">
     <input type="text" id="universal-input" placeholder="Search library or paste link to pull..." autocomplete="off">
     <button type="submit" id="pull-btn" class="pull-button">Pull</button>
   </form>
+  <div id="predictions-dropdown" class="predictions-dropdown glass">
+  <div id="prediction-loader" class="prediction-loading hidden">
+    <svg class="loader-spinner" viewBox="0 0 50 50">
+      <circle class="loader-circle" cx="25" cy="25" r="20" fill="none" stroke="var(--text-faint)" stroke-width="4" stroke-linecap="round"/>
+    </svg>
+  </div>
+</div>
   <div class="error-banner" id="error-banner"></div>
 
   <div class="queue" id="queue"></div>

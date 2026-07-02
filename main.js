@@ -4,7 +4,7 @@ const fs = require('fs');
 const { randomUUID } = require('crypto');
 
 const db = require('./src/db');
-const { detectSource, fetchInfo, downloadAudio } = require('./src/ytdlp');
+const { detectSource, fetchInfo, downloadAudio, searchYoutube } = require('./src/ytdlp');
 
 let mainWindow;
 let database;
@@ -213,6 +213,11 @@ ipcMain.handle('queue-download', async (event, url) => {
 
   return { id: jobId, source };
 });
+
+ipcMain.handle('search-youtube', async (event, query) => {
+  return await searchYoutube(query);
+});
+
 
 const config = require('./src/config');
 

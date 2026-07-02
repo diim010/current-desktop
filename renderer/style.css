@@ -432,3 +432,82 @@ html, body {
 #modal-save-btn:hover {
   opacity: 0.95;
 }
+
+/* ---------------- Predictions Dropdown ---------------- */
+.predictions-dropdown {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  margin-top: 4px;
+  margin-bottom: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  z-index: 50;
+}
+.predictions-dropdown.show {
+  display: flex;
+}
+.prediction-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.prediction-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.prediction-thumb {
+  width: 48px;
+  height: 27px;
+  border-radius: 4px;
+  background-size: cover;
+  background-position: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+.prediction-info {
+  flex: 1;
+  min-width: 0;
+}
+.prediction-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prediction-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: 'SF Mono', monospace;
+  margin-top: 1px;
+}
+.prediction-actions {
+  flex-shrink: 0;
+}
+.prediction-pull-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-weight: 600;
+  font-size: 11px;
+  color: #06121a;
+  background: linear-gradient(135deg, var(--accent-cyan), #9be9ff);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.prediction-pull-btn:active {
+  transform: scale(0.95);
+}
+.prediction-loading {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
