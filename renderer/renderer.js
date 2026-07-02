@@ -30,6 +30,7 @@ let activeQuery = '';
 const jobsById = new Map();
 let currentEditingTrackId = null;
 let selectedColor = 'none';
+const selectedPredictions = new Map(); // url -> item
 
 /* ---------------- helpers ---------------- */
 
@@ -64,6 +65,45 @@ window.current.onLibraryPathChanged(p => {
 
 libraryPathEl.addEventListener('click', () => {
   window.current.chooseLibraryFolder();
+});
+
+/* ---------------- pull-all bar ---------------- */
+const pullAllBar   = document.getElementById('pull-all-bar');
+const pullAllLabel = document.getElementById('pull-all-label');
+const pullAllBtn   = document.getElementById('pull-all-btn');
+
+function updatePullAllBar() {
+  const n = selectedPredictions.size;
+  if (n > 0) {
+    pullAllBar.classList.add('show');
+    pullAllLabel.textContent = `${n} selected`;
+    pullAllBtn.textContent = n === 1 ? 'Pull 1' : `Pull ${n}`;
+  } else {
+    pullAllBar.classList.remove('show');
+  }
+}
+
+pullAllBtn.addEventListener('click', async () => {
+  if (!selectedPredictions.size) return;
+  pullAllBtn.disabled = true;
+  const items = [...selectedPredictions.values()];
+  selectedPredictions.clear();
+  updatePullAllBar();
+  predictionsDropdown.classList.remove('show');
+  predictionsDropdown.innerHTML = '';
+  input.value = '';
+  activeQuery = '';
+
+  for (const item of items) {
+    try {
+      const { id, source } = await window.current.queueDownload(item.url);
+      jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: item.title });
+      renderQueue();
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+  pullAllBtn.disabled = false;
 });
 
 /* ---------------- composer / queue ---------------- */
@@ -308,12 +348,15 @@ function renderPredictionResults(results) {
     predictionsDropdown.innerHTML = `<div class="prediction-loading">No YouTube results found.</div>`;
     return;
   }
-  predictionsDropdown.innerHTML = results.map(item => {
+
+  // Build rows (loader and pull-all-bar are separate DOM elements, not in innerHTML)
+  const rowsHTML = results.map(item => {
     const thumb = item.thumbnail ? `style="background-image:url('${item.thumbnail}')"` : '';
     const durationStr = item.duration ? fmtDuration(item.duration) : '';
     const meta = [item.uploader, durationStr].filter(Boolean).join(' · ');
     return `
       <div class="prediction-row" data-url="${escapeHtml(item.url)}">
+        <div class="pred-checkbox"></div>
         <div class="prediction-thumb" ${thumb}></div>
         <div class="prediction-info">
           <div class="prediction-title">${escapeHtml(item.title)}</div>
@@ -326,20 +369,46 @@ function renderPredictionResults(results) {
     `;
   }).join('');
 
+  // Insert rows before the pull-all-bar (which is a persistent DOM node)
+  pullAllBar.insertAdjacentHTML('beforebegin', rowsHTML);
+
   predictionsDropdown.querySelectorAll('.prediction-row').forEach(row => {
     const url = row.dataset.url;
+    const item = results.find(r => r.url === url);
     const rowPullBtn = row.querySelector('.prediction-pull-btn');
+
+    // Toggle selection on row click (anywhere except the Pull button)
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.prediction-pull-btn')) return;
+      if (selectedPredictions.has(url)) {
+        selectedPredictions.delete(url);
+        row.classList.remove('selected');
+        row.querySelector('.pred-checkbox').textContent = '';
+      } else {
+        selectedPredictions.set(url, item);
+        row.classList.add('selected');
+        row.querySelector('.pred-checkbox').textContent = '✓';
+      }
+      updatePullAllBar();
+    });
+
+    // Individual Pull button — instant single download
     rowPullBtn.addEventListener('click', e => {
       e.stopPropagation();
       rowPullBtn.disabled = true;
-      rowPullBtn.textContent = 'Pulling...';
+      rowPullBtn.textContent = '···';
+      selectedPredictions.delete(url);
+      updatePullAllBar();
       window.current.queueDownload(url)
         .then(({ id, source }) => {
-          jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: null });
+          jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: item ? item.title : null });
           renderQueue();
           predictionsDropdown.classList.remove('show');
           predictionsDropdown.innerHTML = '';
+          selectedPredictions.clear();
+          updatePullAllBar();
           input.value = '';
+          activeQuery = '';
         })
         .catch(err => {
           showError(err.message);
@@ -347,18 +416,14 @@ function renderPredictionResults(results) {
           rowPullBtn.textContent = 'Pull';
         });
     });
-    row.addEventListener('click', () => {
-      input.value = url;
-      predictionsDropdown.classList.remove('show');
-      predictionsDropdown.innerHTML = '';
-      input.dispatchEvent(new Event('input'));
-    });
   });
 }
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#universal-form') && !e.target.closest('#predictions-dropdown')) {
     predictionsDropdown.classList.remove('show');
+    selectedPredictions.clear();
+    updatePullAllBar();
   }
 });
 
