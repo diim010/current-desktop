@@ -115,8 +115,8 @@ function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
     const proc = spawn(ytdlpPath, [
       `ytsearch5:${query}`,
       '--dump-json',
-      '--no-playlist',
-      '--no-warnings'
+      '--flat-playlist',
+      '--no-warnings',
     ]);
     let out = '';
     let err = '';
@@ -124,6 +124,9 @@ function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
     proc.stderr.on('data', (d) => (err += d.toString()));
     proc.on('error', reject);
     proc.on('close', (code) => {
+      if (code !== 0) {
+        return reject(new Error(err.trim() || `yt-dlp search exited with code ${code}`));
+      }
       try {
         const results = [];
         const lines = out.trim().split('\n').filter(Boolean);
@@ -133,10 +136,13 @@ function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
             results.push({
               id: item.id,
               title: item.title,
-              url: item.webpage_url,
-              uploader: item.uploader,
+              url: item.url || item.webpage_url,
+              uploader: item.uploader || item.channel,
               duration: item.duration,
-              thumbnail: item.thumbnail || (item.thumbnails && item.thumbnails.length ? item.thumbnails[0].url : null),
+              thumbnail: item.thumbnail ||
+                (item.thumbnails && item.thumbnails.length
+                  ? item.thumbnails[item.thumbnails.length - 1].url
+                  : null),
             });
           } catch (e) {
             // ignore malformed line

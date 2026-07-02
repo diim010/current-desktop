@@ -2,6 +2,14 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+// Global references to the current database instance and its user data directory
+let currentDb = null;
+let currentUserDir = null;
+
+function getCurrentDb() {
+  return currentDb;
+}
+
 function initDB(userDataDir) {
   fs.mkdirSync(userDataDir, { recursive: true });
   const db = new Database(path.join(userDataDir, 'library.db'));
@@ -31,6 +39,10 @@ function initDB(userDataDir) {
   } catch (e) {
     // ignore if column exists
   }
+
+  // Store references for later directory changes
+  currentDb = db;
+  currentUserDir = userDataDir;
 
   return db;
 }
@@ -103,8 +115,31 @@ function allTags(db) {
   return [...set].sort();
 }
 
+function changeUserDirectory(newDir) {
+  console.log(`[DB] Changing user directory to ${newDir}`);
+  fs.mkdirSync(newDir, { recursive: true });
+
+  if (currentDb && currentUserDir) {
+    const oldPath = path.join(currentUserDir, 'library.db');
+    const newPath = path.join(newDir, 'library.db');
+    currentDb.close();
+    if (fs.existsSync(oldPath)) {
+      fs.renameSync(oldPath, newPath);
+    }
+    currentDb = initDB(newDir);
+  } else {
+    currentDb = initDB(newDir);
+  }
+  return currentDb;
+}
+
+function getDbFilePath() {
+  return currentUserDir ? path.join(currentUserDir, 'library.db') : null;
+}
+
 module.exports = {
   initDB,
+  getCurrentDb,
   findByVideoId,
   insertTrack,
   getTracks,
@@ -113,4 +148,6 @@ module.exports = {
   setColor,
   deleteTrack,
   allTags,
+  changeUserDirectory,
+  getDbFilePath,
 };

@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('current', {
   openLibraryFolder: () => ipcRenderer.invoke('open-library-folder'),
   getLibraryPath: () => ipcRenderer.invoke('get-library-path'),
   chooseLibraryFolder: () => ipcRenderer.invoke('choose-library-folder'),
-  // Settings API
+  setLibraryFolder: (dir) => ipcRenderer.invoke('set-library-folder', dir),
   getConfig: () => ipcRenderer.invoke('get-config'),
   setConfig: (partial) => ipcRenderer.invoke('set-config', partial),
   // Event listeners

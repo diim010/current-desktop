@@ -5,6 +5,7 @@ const { randomUUID } = require('crypto');
 
 const db = require('./src/db');
 const { detectSource, fetchInfo, downloadAudio, searchYoutube } = require('./src/ytdlp');
+const config = require('./src/config');
 
 let mainWindow;
 let database;
@@ -12,27 +13,8 @@ let database;
 const SOURCES = ['youtube', 'youtube-music', 'soundcloud'];
 
 function libraryRoot() {
-  // Default: ~/Music/Current — override via Settings (stored in app config).
-  const cfg = readConfig();
-  return cfg.libraryPath || path.join(app.getPath('music'), 'Current');
-}
-
-function configPath() {
-  return path.join(app.getPath('userData'), 'config.json');
-}
-
-function readConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function writeConfig(partial) {
-  const cfg = { ...readConfig(), ...partial };
-  fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2));
-  return cfg;
+  // Default: ~/Music/Current — override via Settings (stored via electron-store).
+  return config.get('libraryPath') || path.join(app.getPath('music'), 'Current');
 }
 
 function ensureLibraryFolders() {
@@ -74,12 +56,21 @@ function buildMenu() {
               properties: ['openDirectory', 'createDirectory'],
             });
             if (!result.canceled && result.filePaths[0]) {
-              writeConfig({ libraryPath: result.filePaths[0] });
+              const newPath = result.filePaths[0];
+              config.set('libraryPath', newPath);
               ensureLibraryFolders();
-              mainWindow.webContents.send('library-path-changed', result.filePaths[0]);
+              try {
+                // Change database location and reinitialize
+                database = db.changeUserDirectory(newPath);
+                console.log('[App] Library moved to', newPath);
+              } catch (e) {
+                console.error('[App] Failed to change library folder:', e);
+              }
+              mainWindow.webContents.send('library-path-changed', newPath);
             }
           },
         },
+        { label: 'Settings', click: () => { createSettingsWindow(); } },
         { type: 'separator' },
         { role: 'quit' },
       ],
@@ -104,10 +95,33 @@ function buildMenu() {
 }
 
 app.whenReady().then(() => {
-  database = db.initDB(app.getPath('userData'));
   ensureLibraryFolders();
+  const libPath = libraryRoot();
+  database = db.initDB(libPath);
+  console.log('[App] Initialized DB at', libPath);
   buildMenu();
   createWindow();
+  // Settings window placeholder
+  let settingsWindow = null;
+function createSettingsWindow() {
+  if (settingsWindow) return;
+  settingsWindow = new BrowserWindow({
+    width: 420,
+    height: 260,
+    parent: mainWindow,
+    modal: true,
+    title: 'Settings',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  settingsWindow.loadFile(path.join(__dirname, 'renderer', 'settings.html'));
+  settingsWindow.on('closed', () => { settingsWindow = null; });
+}
+
+
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -129,12 +143,33 @@ ipcMain.handle('choose-library-folder', async () => {
     properties: ['openDirectory', 'createDirectory'],
   });
   if (!result.canceled && result.filePaths[0]) {
-    writeConfig({ libraryPath: result.filePaths[0] });
+    const newPath = result.filePaths[0];
+    config.set('libraryPath', newPath);
     ensureLibraryFolders();
-    mainWindow.webContents.send('library-path-changed', result.filePaths[0]);
-    return result.filePaths[0];
+    try {
+      database = db.changeUserDirectory(newPath);
+      console.log('[App] Library moved to', newPath);
+    } catch (e) {
+      console.error('[App] Failed to change library folder:', e);
+    }
+    mainWindow.webContents.send('library-path-changed', newPath);
+    return newPath;
   }
   return null;
+});
+
+ipcMain.handle('set-library-folder', async (event, newPath) => {
+  if (!newPath) throw new Error('Invalid path');
+  config.set('libraryPath', newPath);
+  ensureLibraryFolders();
+  try {
+    database = db.changeUserDirectory(newPath);
+    console.log('[App] Library changed via Settings to', newPath);
+  } catch (e) {
+    console.error('[App] Failed to change library folder via Settings:', e);
+  }
+  mainWindow.webContents.send('library-path-changed', newPath);
+  return newPath;
 });
 
 ipcMain.handle('queue-download', async (event, url) => {
@@ -219,11 +254,11 @@ ipcMain.handle('search-youtube', async (event, query) => {
 });
 
 
-const config = require('./src/config');
-
 ipcMain.handle('get-config', () => config.getAll());
 ipcMain.handle('set-config', (event, partial) => {
-  config.set(partial);
+  for (const [key, value] of Object.entries(partial)) {
+    config.set(key, value);
+  }
   return config.getAll();
 });
 

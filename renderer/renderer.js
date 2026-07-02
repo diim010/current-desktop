@@ -10,7 +10,6 @@ const pullBtn     = document.getElementById('pull-btn');
 const queueEl     = document.getElementById('queue');
 const errorBanner = document.getElementById('error-banner');
 const fileListEl  = document.getElementById('file-list');
-const tabs        = document.querySelectorAll('.tab');
 const predictionsDropdown = document.getElementById('predictions-dropdown');
 const libraryPathEl = document.getElementById('library-path');
 const player      = document.getElementById('player');
@@ -24,7 +23,9 @@ const modalColorPicker = document.getElementById('modal-color-picker');
 const modalCancelBtn   = document.getElementById('modal-cancel-btn');
 const modalSaveBtn     = document.getElementById('modal-save-btn');
 
-let activeTab = 'all';
+// Cache for recent search queries
+const searchCache = new Map();
+let searchAbortController = null;
 let activeQuery = '';
 const jobsById = new Map();
 let currentEditingTrackId = null;
@@ -219,21 +220,9 @@ function playTrack(row, filepath) {
 }
 
 function loadLibrary() {
-  const opts = activeQuery ? { query: activeQuery } : { source: activeTab };
+  const opts = activeQuery ? { query: activeQuery } : {};
   window.current.getTracks(opts).then(renderLibrary);
 }
-
-tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    tabs.forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    activeTab = tab.dataset.source;
-    input.value = '';
-    pullBtn.classList.remove('visible');
-    activeQuery = '';
-    loadLibrary();
-  });
-});
 
 let searchTimer;
 input.addEventListener('input', () => {
@@ -273,72 +262,98 @@ let currentSearchQuery = '';
 
 async function fetchYoutubePredictions(query) {
   currentSearchQuery = query;
-  predictionsDropdown.innerHTML = `<div class="prediction-loading">Searching YouTube...</div>`;
+
+  // Abort any previous request
+  if (searchAbortController) {
+    searchAbortController.abort();
+  }
+  searchAbortController = new AbortController();
+  const { signal } = searchAbortController;
+
+  // Show loader element
+  const loader = document.getElementById('prediction-loader');
+  if (loader) loader.classList.remove('hidden');
+  predictionsDropdown.innerHTML = '';
   predictionsDropdown.classList.add('show');
-  
+
+  // Use cached results if available
+  if (searchCache.has(query)) {
+    const cachedResults = searchCache.get(query);
+    if (loader) loader.classList.add('hidden');
+    renderPredictionResults(cachedResults);
+    return;
+  }
+
   try {
     const results = await window.current.searchYoutube(query);
-    if (currentSearchQuery !== query) return;
-    
-    if (!results || !results.length) {
-      predictionsDropdown.innerHTML = `<div class="prediction-loading">No YouTube results found.</div>`;
-      return;
-    }
-    
-    predictionsDropdown.innerHTML = results.map(item => {
-      const thumb = item.thumbnail ? `style="background-image:url('${item.thumbnail}')"` : '';
-      const durationStr = item.duration ? fmtDuration(item.duration) : '';
-      const meta = [item.uploader, durationStr].filter(Boolean).join(' · ');
-      return `
-        <div class="prediction-row" data-url="${escapeHtml(item.url)}">
-          <div class="prediction-thumb" ${thumb}></div>
-          <div class="prediction-info">
-            <div class="prediction-title">${escapeHtml(item.title)}</div>
-            <div class="prediction-meta">${escapeHtml(meta)}</div>
-          </div>
-          <div class="prediction-actions">
-            <button class="prediction-pull-btn">Pull</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-    
-    predictionsDropdown.querySelectorAll('.prediction-row').forEach(row => {
-      const url = row.dataset.url;
-      const rowPullBtn = row.querySelector('.prediction-pull-btn');
-      
-      rowPullBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        rowPullBtn.disabled = true;
-        rowPullBtn.textContent = 'Pulling...';
-        
-        window.current.queueDownload(url)
-          .then(({ id, source }) => {
-            jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: null });
-            renderQueue();
-            predictionsDropdown.classList.remove('show');
-            predictionsDropdown.innerHTML = '';
-            input.value = '';
-          })
-          .catch(err => {
-            showError(err.message);
-            rowPullBtn.disabled = false;
-            rowPullBtn.textContent = 'Pull';
-          });
-      });
-      
-      row.addEventListener('click', () => {
-        input.value = url;
-        predictionsDropdown.classList.remove('show');
-        predictionsDropdown.innerHTML = '';
-        input.dispatchEvent(new Event('input'));
-      });
-    });
+    if (signal.aborted) return; // aborted while waiting
+    // Cache results
+    searchCache.set(query, results);
+
+    if (currentSearchQuery !== query) return; // stale response
+    if (loader) loader.classList.add('hidden');
+
+    renderPredictionResults(results);
   } catch (err) {
+    if (err.name === 'AbortError') return; // request was cancelled
     if (currentSearchQuery === query) {
       predictionsDropdown.innerHTML = `<div class="prediction-loading">YouTube search failed.</div>`;
     }
   }
+}
+
+// Helper to render prediction rows
+function renderPredictionResults(results) {
+  if (!results || !results.length) {
+    predictionsDropdown.innerHTML = `<div class="prediction-loading">No YouTube results found.</div>`;
+    return;
+  }
+  predictionsDropdown.innerHTML = results.map(item => {
+    const thumb = item.thumbnail ? `style="background-image:url('${item.thumbnail}')"` : '';
+    const durationStr = item.duration ? fmtDuration(item.duration) : '';
+    const meta = [item.uploader, durationStr].filter(Boolean).join(' · ');
+    return `
+      <div class="prediction-row" data-url="${escapeHtml(item.url)}">
+        <div class="prediction-thumb" ${thumb}></div>
+        <div class="prediction-info">
+          <div class="prediction-title">${escapeHtml(item.title)}</div>
+          <div class="prediction-meta">${escapeHtml(meta)}</div>
+        </div>
+        <div class="prediction-actions">
+          <button class="prediction-pull-btn">Pull</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  predictionsDropdown.querySelectorAll('.prediction-row').forEach(row => {
+    const url = row.dataset.url;
+    const rowPullBtn = row.querySelector('.prediction-pull-btn');
+    rowPullBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      rowPullBtn.disabled = true;
+      rowPullBtn.textContent = 'Pulling...';
+      window.current.queueDownload(url)
+        .then(({ id, source }) => {
+          jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: null });
+          renderQueue();
+          predictionsDropdown.classList.remove('show');
+          predictionsDropdown.innerHTML = '';
+          input.value = '';
+        })
+        .catch(err => {
+          showError(err.message);
+          rowPullBtn.disabled = false;
+          rowPullBtn.textContent = 'Pull';
+        });
+    });
+    row.addEventListener('click', () => {
+      input.value = url;
+      predictionsDropdown.classList.remove('show');
+      predictionsDropdown.innerHTML = '';
+      input.dispatchEvent(new Event('input'));
+    });
+  });
 }
 
 document.addEventListener('click', (e) => {

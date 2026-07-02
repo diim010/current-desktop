@@ -511,3 +511,11 @@ html, body {
   color: var(--text-faint);
   font-size: 12px;
 }
+.prediction-loading.hidden { display:none; }
+.loader-spinner {
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+  margin: auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

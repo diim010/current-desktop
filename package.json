@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron .",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
-    "dist": "electron-builder --mac"
+    "dist": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
@@ -35,6 +36,11 @@
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false
+    },
+    "win": {
+      "target": ["nsis", "zip"],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
     },
     "dmg": {
       "title": "Current"

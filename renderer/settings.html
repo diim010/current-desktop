@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Settings – Current</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="modal-overlay" id="settings-modal" style="display:block;">
+    <div class="glass modal-card" style="max-width:400px;margin:auto;margin-top:80px;">
+      <h3>Settings</h3>
+      <div class="form-group">
+        <label for="library-dir-input">Library Folder</label>
+        <input type="text" id="library-dir-input" placeholder="Path to library folder" style="width:100%;" />
+        <button id="browse-dir-btn" class="pull-button" style="margin-top:8px;">Browse…</button>
+      </div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button id="settings-cancel-btn" class="danger">Cancel</button>
+        <button id="settings-save-btn" class="pull-button">Save</button>
+      </div>
+    </div>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>
