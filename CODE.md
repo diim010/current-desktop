@@ -1,4 +1,4 @@
-1# Current — Full Codebase Reference
+#  Current — Full Codebase Reference
 
 This document compiles all the source code files for the **Current** Electron application.
 
@@ -235,6 +235,19 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('get-library-path', () => libraryRoot());
 
+ipcMain.handle('choose-library-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (!result.canceled && result.filePaths[0]) {
+    writeConfig({ libraryPath: result.filePaths[0] });
+    ensureLibraryFolders();
+    mainWindow.webContents.send('library-path-changed', result.filePaths[0]);
+    return result.filePaths[0];
+  }
+  return null;
+});
+
 ipcMain.handle('queue-download', async (event, url) => {
   const source = detectSource(url);
   if (!source) {
@@ -253,7 +266,7 @@ ipcMain.handle('queue-download', async (event, url) => {
       try {
         info = await fetchInfo(url);
       } catch {
-        // Some extractors (e.g. certain SoundCloud sets) are picky about
+        // Some extractors (e.g. certain SoundCloud set) are picky about
         // --dump-json; fall back to downloading without dedup metadata.
       }
 
@@ -312,6 +325,8 @@ ipcMain.handle('all-tags', () => db.allTags(database));
 
 ipcMain.handle('set-tags', (event, { id, tags }) => db.setTags(database, id, tags));
 
+ipcMain.handle('set-color', (event, { id, color }) => db.setColor(database, id, color));
+
 ipcMain.handle('delete-track', (event, id) => {
   const track = db.deleteTrack(database, id);
   if (track && track.filepath && fs.existsSync(track.filepath)) {
@@ -338,10 +353,12 @@ contextBridge.exposeInMainWorld('current', {
   getTracks: (opts) => ipcRenderer.invoke('get-tracks', opts),
   allTags: () => ipcRenderer.invoke('all-tags'),
   setTags: (id, tags) => ipcRenderer.invoke('set-tags', { id, tags }),
+  setColor: (id, color) => ipcRenderer.invoke('set-color', { id, color }),
   deleteTrack: (id) => ipcRenderer.invoke('delete-track', id),
   revealInFinder: (filepath) => ipcRenderer.invoke('reveal-in-finder', filepath),
   openLibraryFolder: () => ipcRenderer.invoke('open-library-folder'),
   getLibraryPath: () => ipcRenderer.invoke('get-library-path'),
+  chooseLibraryFolder: () => ipcRenderer.invoke('choose-library-folder'),
   onJobUpdate: (cb) => ipcRenderer.on('job-update', (event, payload) => cb(payload)),
   onLibraryPathChanged: (cb) => ipcRenderer.on('library-path-changed', (event, path) => cb(path)),
 });
@@ -374,11 +391,19 @@ function initDB(userDataDir) {
       thumbnail TEXT,
       url TEXT,
       tags TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT 'none',
       added_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tracks_source ON tracks(source);
     CREATE INDEX IF NOT EXISTS idx_tracks_video_id ON tracks(video_id);
   `);
+
+  try {
+    db.exec("ALTER TABLE tracks ADD COLUMN color TEXT NOT NULL DEFAULT 'none'");
+  } catch (e) {
+    // ignore if column exists
+  }
+
   return db;
 }
 
@@ -389,8 +414,8 @@ function findByVideoId(db, videoId) {
 
 function insertTrack(db, track) {
   const stmt = db.prepare(`
-    INSERT INTO tracks (video_id, source, title, artist, uploader, duration, filepath, thumbnail, url, tags, added_at)
-    VALUES (@video_id, @source, @title, @artist, @uploader, @duration, @filepath, @thumbnail, @url, @tags, @added_at)
+    INSERT INTO tracks (video_id, source, title, artist, uploader, duration, filepath, thumbnail, url, tags, color, added_at)
+    VALUES (@video_id, @source, @title, @artist, @uploader, @duration, @filepath, @thumbnail, @url, @tags, @color, @added_at)
   `);
   const info = stmt.run({
     video_id: track.video_id || null,
@@ -403,6 +428,7 @@ function insertTrack(db, track) {
     thumbnail: track.thumbnail || null,
     url: track.url || null,
     tags: track.tags || '',
+    color: track.color || 'none',
     added_at: Date.now(),
   });
   return db.prepare('SELECT * FROM tracks WHERE id = ?').get(info.lastInsertRowid);
@@ -419,13 +445,18 @@ function searchTracks(db, query) {
   const like = `%${query}%`;
   return db.prepare(`
     SELECT * FROM tracks
-    WHERE title LIKE ? OR artist LIKE ? OR uploader LIKE ? OR tags LIKE ?
+    WHERE title LIKE ? OR artist LIKE ? OR uploader LIKE ? OR tags LIKE ? OR color LIKE ?
     ORDER BY added_at DESC
-  `).all(like, like, like, like);
+  `).all(like, like, like, like, like);
 }
 
 function setTags(db, id, tags) {
   db.prepare('UPDATE tracks SET tags = ? WHERE id = ?').run(tags, id);
+  return db.prepare('SELECT * FROM tracks WHERE id = ?').get(id);
+}
+
+function setColor(db, id, color) {
+  db.prepare('UPDATE tracks SET color = ? WHERE id = ?').run(color, id);
   return db.prepare('SELECT * FROM tracks WHERE id = ?').get(id);
 }
 
@@ -451,6 +482,7 @@ module.exports = {
   getTracks,
   searchTracks,
   setTags,
+  setColor,
   deleteTrack,
   allTags,
 };
@@ -594,7 +626,7 @@ module.exports = { detectSource, fetchInfo, downloadAudio };
 
   <div class="brand">
     <h1>Current</h1>
-    <p id="library-path">Pulling into ~/Music/Current</p>
+    <p>Pulling into <span id="library-path" class="clickable-path" title="Click to choose another folder…">~/Music/Current</span></p>
   </div>
 
   <form id="composer-form" class="glass composer">
@@ -630,6 +662,34 @@ module.exports = { detectSource, fetchInfo, downloadAudio };
   <audio id="player" controls></audio>
 </div>
 
+<div class="modal-overlay" id="edit-modal">
+  <div class="glass modal-card">
+    <h3>Edit Track Info</h3>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Tags (comma separated)</label>
+        <input type="text" id="modal-tags-input" placeholder="e.g. lo-fi, chill, favorite" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Color Marker</label>
+        <div class="color-picker" id="modal-color-picker">
+          <div class="color-option color-none selected" data-color="none" title="None"></div>
+          <div class="color-option color-red" data-color="red" title="Red"></div>
+          <div class="color-option color-orange" data-color="orange" title="Orange"></div>
+          <div class="color-option color-yellow" data-color="yellow" title="Yellow"></div>
+          <div class="color-option color-green" data-color="green" title="Green"></div>
+          <div class="color-option color-blue" data-color="blue" title="Blue"></div>
+          <div class="color-option color-purple" data-color="purple" title="Purple"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="modal-cancel-btn">Cancel</button>
+      <button id="modal-save-btn">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="renderer.js"></script>
 </body>
 </html>
@@ -656,9 +716,18 @@ const player      = document.getElementById('player');
 const npTitle     = document.getElementById('np-title');
 const npMeta      = document.getElementById('np-meta');
 
+// Edit Modal elements
+const editModal        = document.getElementById('edit-modal');
+const modalTagsInput   = document.getElementById('modal-tags-input');
+const modalColorPicker = document.getElementById('modal-color-picker');
+const modalCancelBtn   = document.getElementById('modal-cancel-btn');
+const modalSaveBtn     = document.getElementById('modal-save-btn');
+
 let activeTab = 'all';
 let activeQuery = '';
 const jobsById = new Map();
+let currentEditingTrackId = null;
+let selectedColor = 'none';
 
 /* ---------------- helpers ---------------- */
 
@@ -684,11 +753,15 @@ function showError(msg) {
 /* ---------------- library path ---------------- */
 
 window.current.getLibraryPath().then(p => {
-  libraryPathEl.textContent = `Pulling into ${p}`;
+  libraryPathEl.textContent = p;
 });
 window.current.onLibraryPathChanged(p => {
-  libraryPathEl.textContent = `Pulling into ${p}`;
+  libraryPathEl.textContent = p;
   loadLibrary();
+});
+
+libraryPathEl.addEventListener('click', () => {
+  window.current.chooseLibraryFolder();
 });
 
 /* ---------------- composer / queue ---------------- */
@@ -752,8 +825,6 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-/* ---------------- library ---------------- */
-
 function fileRowHTML(track) {
   const thumb = track.thumbnail ? `style="background-image:url('${track.thumbnail}')"` : '';
   const icon = track.thumbnail ? '' : '♪';
@@ -761,7 +832,7 @@ function fileRowHTML(track) {
   const tagHtml = tags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('');
 
   return `
-    <div class="file-row" data-id="${track.id}" data-path="${escapeHtml(track.filepath)}">
+    <div class="file-row color-${track.color || 'none'}" data-id="${track.id}" data-path="${escapeHtml(track.filepath)}">
       <div class="file-icon" ${thumb}>${icon}</div>
       <div class="file-info">
         <div class="file-name">${escapeHtml(track.title)}</div>
@@ -801,18 +872,15 @@ function renderLibrary(tracks) {
       window.current.revealInFinder(filepath);
     });
 
-    row.querySelector('.danger.delete-btn').addEventListener('click', (e) => {
+    row.querySelector('.delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       window.current.deleteTrack(id).then(loadLibrary);
     });
 
-    row.querySelector('.tag-btn').addEventListener('click', async (e) => {
+    row.querySelector('.tag-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       const current = tracks.find(t => t.id === id);
-      const next = prompt('Tags (comma separated):', current.tags || '');
-      if (next === null) return;
-      await window.current.setTags(id, next.trim());
-      loadLibrary();
+      openEditModal(current);
     });
   });
 }
@@ -849,6 +917,56 @@ searchInput.addEventListener('input', () => {
     activeQuery = searchInput.value.trim();
     loadLibrary();
   }, 200);
+});
+
+/* ---------------- Edit Modal ---------------- */
+
+function openEditModal(track) {
+  currentEditingTrackId = track.id;
+  modalTagsInput.value = track.tags || '';
+  
+  selectedColor = track.color || 'none';
+  modalColorPicker.querySelectorAll('.color-option').forEach(opt => {
+    opt.classList.toggle('selected', opt.dataset.color === selectedColor);
+  });
+  
+  editModal.classList.add('show');
+}
+
+function closeEditModal() {
+  editModal.classList.remove('show');
+  currentEditingTrackId = null;
+}
+
+modalColorPicker.addEventListener('click', (e) => {
+  const option = e.target.closest('.color-option');
+  if (!option) return;
+  
+  selectedColor = option.dataset.color;
+  modalColorPicker.querySelectorAll('.color-option').forEach(opt => {
+    opt.classList.toggle('selected', opt === option);
+  });
+});
+
+modalCancelBtn.addEventListener('click', closeEditModal);
+
+modalSaveBtn.addEventListener('click', async () => {
+  if (!currentEditingTrackId) return;
+  
+  const tags = modalTagsInput.value.trim();
+  const color = selectedColor;
+  
+  await window.current.setTags(currentEditingTrackId, tags);
+  await window.current.setColor(currentEditingTrackId, color);
+  
+  closeEditModal();
+  loadLibrary();
+});
+
+editModal.addEventListener('click', (e) => {
+  if (e.target === editModal) {
+    closeEditModal();
+  }
 });
 
 loadLibrary();
@@ -913,6 +1031,18 @@ html, body {
   font-size: 12px;
   font-family: 'SF Mono', 'JetBrains Mono', monospace;
 }
+.clickable-path {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+  color: var(--accent-cyan);
+  transition: color 0.15s ease;
+}
+.clickable-path:hover {
+  color: #9be9ff;
+  text-decoration-style: solid;
+}
 
 .glass {
   background: var(--glass-fill);
@@ -963,7 +1093,7 @@ html, body {
   font-size: 12.5px;
   flex-shrink: 0;
 }
-.error-banner.show { block; }
+.error-banner.show { display: block; }
 
 /* ---------------- Queue ---------------- */
 .queue {
@@ -1092,4 +1222,151 @@ html, body {
 .np-meta { font-size: 10.5px; color: var(--text-faint); font-family: 'SF Mono', monospace; }
 #player { flex: 1; height: 28px; }
 #player::-webkit-media-controls-panel { background: transparent; }
+
+.file-row.color-red { border-color: rgba(255, 107, 129, 0.25); }
+.file-row.color-orange { border-color: rgba(255, 171, 94, 0.25); }
+.file-row.color-yellow { border-color: rgba(252, 211, 77, 0.25); }
+.file-row.color-green { border-color: rgba(52, 211, 153, 0.25); }
+.file-row.color-blue { border-color: rgba(96, 165, 250, 0.25); }
+.file-row.color-purple { border-color: rgba(167, 139, 250, 0.25); }
+
+.file-row.color-red:hover { border-color: rgba(255, 107, 129, 0.5); background: rgba(255, 107, 129, 0.04); }
+.file-row.color-orange:hover { border-color: rgba(255, 171, 94, 0.5); background: rgba(255, 171, 94, 0.04); }
+.file-row.color-yellow:hover { border-color: rgba(252, 211, 77, 0.5); background: rgba(252, 211, 77, 0.04); }
+.file-row.color-green:hover { border-color: rgba(52, 211, 153, 0.5); background: rgba(52, 211, 153, 0.04); }
+.file-row.color-blue:hover { border-color: rgba(96, 165, 250, 0.5); background: rgba(96, 165, 250, 0.04); }
+.file-row.color-purple:hover { border-color: rgba(167, 139, 250, 0.5); background: rgba(167, 139, 250, 0.04); }
+
+.file-row.playing { border-color: var(--accent-cyan) !important; box-shadow: 0 0 10px rgba(94, 234, 212, 0.2); }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+}
+.modal-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+.modal-card {
+  width: 90%;
+  max-width: 400px;
+  padding: 24px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transform: scale(0.92);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-overlay.show .modal-card {
+  transform: scale(1);
+}
+.modal-card h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.form-group label {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: 'SF Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.form-group input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.form-group input:focus {
+  border-color: var(--accent-cyan);
+}
+.color-picker {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+}
+.color-option {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.color-option:hover {
+  transform: scale(1.2);
+}
+.color-option.selected {
+  border-color: var(--text-primary);
+  transform: scale(1.15);
+}
+
+.color-option.color-none { background: #4b5563; }
+.color-option.color-red { background: var(--accent-youtube); }
+.color-option.color-orange { background: var(--accent-soundcloud); }
+.color-option.color-yellow { background: #fcd34d; }
+.color-option.color-green { background: #34d399; }
+.color-option.color-blue { background: #60a5fa; }
+.color-option.color-purple { background: var(--accent-ytmusic); }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+.modal-actions button {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 20px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.modal-actions button:active {
+  transform: scale(0.96);
+}
+#modal-cancel-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border);
+}
+#modal-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+#modal-save-btn {
+  color: #06121a;
+  background: linear-gradient(135deg, var(--accent-cyan), #9be9ff);
+}
+#modal-save-btn:hover {
+  opacity: 0.95;
+}
 ```

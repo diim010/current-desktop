@@ -37,9 +37,7 @@ function writeConfig(partial) {
 
 function ensureLibraryFolders() {
   const root = libraryRoot();
-  for (const source of SOURCES) {
-    fs.mkdirSync(path.join(root, source), { recursive: true });
-  }
+  fs.mkdirSync(root, { recursive: true });
 }
 
 function createWindow() {
@@ -126,6 +124,19 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('get-library-path', () => libraryRoot());
 
+ipcMain.handle('choose-library-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (!result.canceled && result.filePaths[0]) {
+    writeConfig({ libraryPath: result.filePaths[0] });
+    ensureLibraryFolders();
+    mainWindow.webContents.send('library-path-changed', result.filePaths[0]);
+    return result.filePaths[0];
+  }
+  return null;
+});
+
 ipcMain.handle('queue-download', async (event, url) => {
   const source = detectSource(url);
   if (!source) {
@@ -133,7 +144,7 @@ ipcMain.handle('queue-download', async (event, url) => {
   }
 
   const jobId = randomUUID();
-  const outDir = path.join(libraryRoot(), source);
+  const outDir = libraryRoot();
 
   // Run async; report progress via events keyed by jobId.
   (async () => {
@@ -168,6 +179,15 @@ ipcMain.handle('queue-download', async (event, url) => {
         mainWindow.webContents.send('job-update', { id: jobId, status: 'downloading', source, progress: pct, title: info ? info.title : null });
       });
 
+      const tagsList = [];
+      if (source) {
+        tagsList.push(source);
+      }
+      if (info && (info.playlist_title || info.playlist)) {
+        tagsList.push(info.playlist_title || info.playlist);
+      }
+      const initialTags = tagsList.filter(Boolean).join(', ');
+
       const track = db.insertTrack(database, {
         video_id: info ? info.id : null,
         source,
@@ -178,7 +198,7 @@ ipcMain.handle('queue-download', async (event, url) => {
         filepath,
         thumbnail: info ? info.thumbnail : null,
         url,
-        tags: '',
+        tags: initialTags,
       });
 
       mainWindow.webContents.send('job-update', {
@@ -194,6 +214,14 @@ ipcMain.handle('queue-download', async (event, url) => {
   return { id: jobId, source };
 });
 
+const config = require('./src/config');
+
+ipcMain.handle('get-config', () => config.getAll());
+ipcMain.handle('set-config', (event, partial) => {
+  config.set(partial);
+  return config.getAll();
+});
+
 ipcMain.handle('get-tracks', (event, { source, query } = {}) => {
   if (query && query.trim()) return db.searchTracks(database, query.trim());
   return db.getTracks(database, source);
@@ -202,6 +230,8 @@ ipcMain.handle('get-tracks', (event, { source, query } = {}) => {
 ipcMain.handle('all-tags', () => db.allTags(database));
 
 ipcMain.handle('set-tags', (event, { id, tags }) => db.setTags(database, id, tags));
+
+ipcMain.handle('set-color', (event, { id, color }) => db.setColor(database, id, color));
 
 ipcMain.handle('delete-track', (event, id) => {
   const track = db.deleteTrack(database, id);

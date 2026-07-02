@@ -19,11 +19,19 @@ function initDB(userDataDir) {
       thumbnail TEXT,
       url TEXT,
       tags TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT 'none',
       added_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tracks_source ON tracks(source);
     CREATE INDEX IF NOT EXISTS idx_tracks_video_id ON tracks(video_id);
   `);
+
+  try {
+    db.exec("ALTER TABLE tracks ADD COLUMN color TEXT NOT NULL DEFAULT 'none'");
+  } catch (e) {
+    // ignore if column exists
+  }
+
   return db;
 }
 
@@ -34,8 +42,8 @@ function findByVideoId(db, videoId) {
 
 function insertTrack(db, track) {
   const stmt = db.prepare(`
-    INSERT INTO tracks (video_id, source, title, artist, uploader, duration, filepath, thumbnail, url, tags, added_at)
-    VALUES (@video_id, @source, @title, @artist, @uploader, @duration, @filepath, @thumbnail, @url, @tags, @added_at)
+    INSERT INTO tracks (video_id, source, title, artist, uploader, duration, filepath, thumbnail, url, tags, color, added_at)
+    VALUES (@video_id, @source, @title, @artist, @uploader, @duration, @filepath, @thumbnail, @url, @tags, @color, @added_at)
   `);
   const info = stmt.run({
     video_id: track.video_id || null,
@@ -48,6 +56,7 @@ function insertTrack(db, track) {
     thumbnail: track.thumbnail || null,
     url: track.url || null,
     tags: track.tags || '',
+    color: track.color || 'none',
     added_at: Date.now(),
   });
   return db.prepare('SELECT * FROM tracks WHERE id = ?').get(info.lastInsertRowid);
@@ -64,13 +73,18 @@ function searchTracks(db, query) {
   const like = `%${query}%`;
   return db.prepare(`
     SELECT * FROM tracks
-    WHERE title LIKE ? OR artist LIKE ? OR uploader LIKE ? OR tags LIKE ?
+    WHERE title LIKE ? OR artist LIKE ? OR uploader LIKE ? OR tags LIKE ? OR color LIKE ?
     ORDER BY added_at DESC
-  `).all(like, like, like, like);
+  `).all(like, like, like, like, like);
 }
 
 function setTags(db, id, tags) {
   db.prepare('UPDATE tracks SET tags = ? WHERE id = ?').run(tags, id);
+  return db.prepare('SELECT * FROM tracks WHERE id = ?').get(id);
+}
+
+function setColor(db, id, color) {
+  db.prepare('UPDATE tracks SET color = ? WHERE id = ?').run(color, id);
   return db.prepare('SELECT * FROM tracks WHERE id = ?').get(id);
 }
 
@@ -96,6 +110,7 @@ module.exports = {
   getTracks,
   searchTracks,
   setTags,
+  setColor,
   deleteTrack,
   allTags,
 };

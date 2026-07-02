@@ -4,22 +4,30 @@ const SOURCE_LABELS = {
   'soundcloud': 'SoundCloud',
 };
 
-const form        = document.getElementById('composer-form');
-const input       = document.getElementById('url-input');
+const form        = document.getElementById('universal-form');
+const input       = document.getElementById('universal-input');
 const pullBtn     = document.getElementById('pull-btn');
 const queueEl     = document.getElementById('queue');
 const errorBanner = document.getElementById('error-banner');
 const fileListEl  = document.getElementById('file-list');
-const searchInput = document.getElementById('search-input');
 const tabs        = document.querySelectorAll('.tab');
 const libraryPathEl = document.getElementById('library-path');
 const player      = document.getElementById('player');
 const npTitle     = document.getElementById('np-title');
 const npMeta      = document.getElementById('np-meta');
 
+// Edit Modal elements
+const editModal        = document.getElementById('edit-modal');
+const modalTagsInput   = document.getElementById('modal-tags-input');
+const modalColorPicker = document.getElementById('modal-color-picker');
+const modalCancelBtn   = document.getElementById('modal-cancel-btn');
+const modalSaveBtn     = document.getElementById('modal-save-btn');
+
 let activeTab = 'all';
 let activeQuery = '';
 const jobsById = new Map();
+let currentEditingTrackId = null;
+let selectedColor = 'none';
 
 /* ---------------- helpers ---------------- */
 
@@ -45,29 +53,44 @@ function showError(msg) {
 /* ---------------- library path ---------------- */
 
 window.current.getLibraryPath().then(p => {
-  libraryPathEl.textContent = `Pulling into ${p}`;
+  libraryPathEl.textContent = p;
 });
 window.current.onLibraryPathChanged(p => {
-  libraryPathEl.textContent = `Pulling into ${p}`;
+  libraryPathEl.textContent = p;
   loadLibrary();
+});
+
+libraryPathEl.addEventListener('click', () => {
+  window.current.chooseLibraryFolder();
 });
 
 /* ---------------- composer / queue ---------------- */
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  const url = input.value.trim();
-  if (!url) return;
+  const val = input.value.trim();
+  if (!val) return;
 
-  pullBtn.disabled = true;
-  window.current.queueDownload(url)
-    .then(({ id, source }) => {
+  const urlRegex = /(https?:\/\/[^\s,]+)/g;
+  const urls = val.match(urlRegex) || [];
+
+  if (urls.length > 0) {
+    pullBtn.disabled = true;
+    Promise.all(urls.map(url => 
+      window.current.queueDownload(url)
+        .then(({ id, source }) => {
+          jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: null });
+        })
+        .catch(err => showError(err.message))
+    )).finally(() => {
       input.value = '';
-      jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: null });
+      pullBtn.disabled = false;
+      pullBtn.classList.remove('visible');
+      activeQuery = '';
+      loadLibrary();
       renderQueue();
-    })
-    .catch(err => showError(err.message))
-    .finally(() => { pullBtn.disabled = false; });
+    });
+  }
 });
 
 window.current.onJobUpdate((job) => {
@@ -93,8 +116,11 @@ function jobCardHTML(job) {
   else { meta += ` · ${pct.toFixed(0)}%`; }
 
   return `
-    <div class="job-card ${stateClass}">
-      <div class="job-row"><div class="job-title">${escapeHtml(title)}</div></div>
+    <div class="job-card ${stateClass}" data-job-id="${job.id}">
+      <div class="job-row">
+        <div class="job-title">${escapeHtml(title)}</div>
+        ${job.status === 'error' ? `<button class="dismiss-job-btn" title="Dismiss error">✕</button>` : ''}
+      </div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
       <div class="job-row">
         <div class="job-meta">${meta}</div>
@@ -107,13 +133,20 @@ function jobCardHTML(job) {
 function renderQueue() {
   const jobs = [...jobsById.values()];
   queueEl.innerHTML = jobs.map(jobCardHTML).join('');
+
+  queueEl.querySelectorAll('.dismiss-job-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const card = e.target.closest('.job-card');
+      const jobId = card.dataset.jobId;
+      jobsById.delete(jobId);
+      renderQueue();
+    });
+  });
 }
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
-/* ---------------- library ---------------- */
 
 function fileRowHTML(track) {
   const thumb = track.thumbnail ? `style="background-image:url('${track.thumbnail}')"` : '';
@@ -122,7 +155,7 @@ function fileRowHTML(track) {
   const tagHtml = tags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('');
 
   return `
-    <div class="file-row" data-id="${track.id}" data-path="${escapeHtml(track.filepath)}">
+    <div class="file-row color-${track.color || 'none'}" data-id="${track.id}" data-path="${escapeHtml(track.filepath)}">
       <div class="file-icon" ${thumb}>${icon}</div>
       <div class="file-info">
         <div class="file-name">${escapeHtml(track.title)}</div>
@@ -167,13 +200,10 @@ function renderLibrary(tracks) {
       window.current.deleteTrack(id).then(loadLibrary);
     });
 
-    row.querySelector('.tag-btn').addEventListener('click', async (e) => {
+    row.querySelector('.tag-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       const current = tracks.find(t => t.id === id);
-      const next = prompt('Tags (comma separated):', current.tags || '');
-      if (next === null) return;
-      await window.current.setTags(id, next.trim());
-      loadLibrary();
+      openEditModal(current);
     });
   });
 }
@@ -197,19 +227,83 @@ tabs.forEach(tab => {
     tabs.forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     activeTab = tab.dataset.source;
-    searchInput.value = '';
+    input.value = '';
+    pullBtn.classList.remove('visible');
     activeQuery = '';
     loadLibrary();
   });
 });
 
 let searchTimer;
-searchInput.addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    activeQuery = searchInput.value.trim();
-    loadLibrary();
-  }, 200);
+input.addEventListener('input', () => {
+  const val = input.value.trim();
+  const urlRegex = /(https?:\/\/[^\s,]+)/g;
+  const hasUrl = urlRegex.test(val);
+
+  if (hasUrl) {
+    pullBtn.classList.add('visible');
+    if (activeQuery !== '') {
+      activeQuery = '';
+      loadLibrary();
+    }
+  } else {
+    pullBtn.classList.remove('visible');
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      activeQuery = val;
+      loadLibrary();
+    }, 200);
+  }
+});
+
+/* ---------------- Edit Modal ---------------- */
+
+function openEditModal(track) {
+  currentEditingTrackId = track.id;
+  modalTagsInput.value = track.tags || '';
+  
+  selectedColor = track.color || 'none';
+  modalColorPicker.querySelectorAll('.color-option').forEach(opt => {
+    opt.classList.toggle('selected', opt.dataset.color === selectedColor);
+  });
+  
+  editModal.classList.add('show');
+}
+
+function closeEditModal() {
+  editModal.classList.remove('show');
+  currentEditingTrackId = null;
+}
+
+modalColorPicker.addEventListener('click', (e) => {
+  const option = e.target.closest('.color-option');
+  if (!option) return;
+  
+  selectedColor = option.dataset.color;
+  modalColorPicker.querySelectorAll('.color-option').forEach(opt => {
+    opt.classList.toggle('selected', opt === option);
+  });
+});
+
+modalCancelBtn.addEventListener('click', closeEditModal);
+
+modalSaveBtn.addEventListener('click', async () => {
+  if (!currentEditingTrackId) return;
+  
+  const tags = modalTagsInput.value.trim();
+  const color = selectedColor;
+  
+  await window.current.setTags(currentEditingTrackId, tags);
+  await window.current.setColor(currentEditingTrackId, color);
+  
+  closeEditModal();
+  loadLibrary();
+});
+
+editModal.addEventListener('click', (e) => {
+  if (e.target === editModal) {
+    closeEditModal();
+  }
 });
 
 loadLibrary();

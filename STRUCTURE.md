@@ -97,6 +97,7 @@ The database uses a single main table: `tracks` with the following columns:
 | `thumbnail` | `TEXT` | | HTTP URL to the original thumbnail image. |
 | `url` | `TEXT` | | Original media page URL. |
 | `tags` | `TEXT` | `NOT NULL DEFAULT ''` | Comma-separated user-defined tags. |
+| `color` | `TEXT` | `NOT NULL DEFAULT 'none'` | Selected track color marker (none, red, orange, yellow, green, blue, purple). |
 | `added_at` | `INTEGER` | `NOT NULL` | Date/time stamp (Epoch ms) of entry insertion. |
 
 **Indexes defined:**

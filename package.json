@@ -12,6 +12,7 @@
     "dist": "electron-builder --mac"
   },
   "dependencies": {
+    "electron-store": "^8.1.0",
     "better-sqlite3": "^11.3.0"
   },
   "devDependencies": {
