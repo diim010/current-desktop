@@ -364,6 +364,130 @@ button {
   min-height: 0;
 }
 .panel-top { flex-shrink: 0; margin-bottom: 10px; }
+.library-nav { display: flex; flex-direction: column; gap: 8px; }
+.library-nav-main { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.library-heading { display: flex; flex-direction: column; gap: 2px; }
+.library-title { font-size: 14px; font-weight: 700; }
+.library-summary { font-size: 11px; color: var(--text-faint); font-family: 'SF Mono', monospace; }
+.library-tools { display: flex; align-items: center; gap: 6px; }
+.sort-select {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: 'SF Mono', monospace;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23d4dae3' d='M2 4l4 4 4-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px;
+}
+.sort-select:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(105, 245, 212, 0.2);
+}
+.filter-reset {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-family: 'SF Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.filter-reset:hover {
+  color: var(--text-primary);
+  background: var(--glass-fill);
+  border-color: var(--glass-border-strong);
+}
+.filter-reset.visible {
+  color: var(--accent-cyan);
+  border-color: rgba(105, 245, 212, 0.4);
+  background: rgba(105, 245, 212, 0.08);
+}
+.filter-reset.visible:hover {
+  background: rgba(105, 245, 212, 0.15);
+}
+.filter-reset:not(.visible) {
+  display: none;
+}
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-row.hidden { display: none; }
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.055);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: 'SF Mono', monospace;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.filter-chip:hover:not(:disabled) {
+  background: var(--glass-fill);
+  border-color: var(--glass-border);
+  color: var(--text-primary);
+}
+.filter-chip:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.filter-chip.active {
+  background: var(--glass-fill);
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
+}
+.filter-chip.source-filter-chip.active {
+  color: var(--text-primary);
+}
+.color-filter-chip.active .color-swatch {
+  box-shadow: 0 0 0 2px var(--text-primary) inset;
+}
+.filter-chip.tag-filter-chip.active {
+  background: var(--glass-fill);
+  border-color: var(--accent-ytmusic);
+  color: var(--text-primary);
+}
+.color-filter-chip .color-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.color-swatch.color-red { background: var(--accent-youtube); }
+.color-swatch.color-orange { background: var(--accent-soundcloud); }
+.color-swatch.color-yellow { background: #fcd34d; }
+.color-swatch.color-green { background: #34d399; }
+.color-swatch.color-blue { background: #60a5fa; }
+.color-swatch.color-purple { background: var(--accent-ytmusic); }
+.color-swatch.color-none { background: #4b5563; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.filter-count {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+/* Color filter chip active states */
+.color-filter-chip.active.color-red { border-color: var(--accent-youtube); }
+.color-filter-chip.active.color-orange { border-color: var(--accent-soundcloud); }
+.color-filter-chip.active.color-yellow { border-color: #fcd34d; }
+.color-filter-chip.active.color-green { border-color: #34d399; }
+.color-filter-chip.active.color-blue { border-color: #60a5fa; }
+.color-filter-chip.active.color-purple { border-color: var(--accent-ytmusic); }
+.color-filter-chip.active.color-none { border-color: #4b5563; }
 .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
 .tab {
   flex: 1; text-align: center; padding: 7px 4px;

@@ -10,6 +10,12 @@ const pullBtn     = document.getElementById('pull-btn');
 const queueEl     = document.getElementById('queue');
 const errorBanner = document.getElementById('error-banner');
 const fileListEl  = document.getElementById('file-list');
+const librarySummaryEl = document.getElementById('library-summary');
+const sourceFilterEl = document.getElementById('source-filter');
+const colorFilterEl = document.getElementById('color-filter');
+const tagFilterEl = document.getElementById('tag-filter');
+const sortSelect = document.getElementById('sort-select');
+const libraryResetBtn = document.getElementById('library-reset-btn');
 const predictionsDropdown = document.getElementById('predictions-dropdown');
 const libraryPathEl = document.getElementById('library-path');
 const player      = document.getElementById('player');
@@ -32,6 +38,20 @@ const jobsById = new Map();
 let currentEditingTrackId = null;
 let selectedColor = 'none';
 const selectedPredictions = new Map(); // url -> item
+const libraryState = {
+  source: 'all',
+  color: 'all',
+  tag: 'all',
+  sort: 'recent',
+  tracks: [],
+};
+const SOURCE_FILTERS = [
+  ['all', 'All'],
+  ['youtube', 'YouTube'],
+  ['youtube-music', 'Music'],
+  ['soundcloud', 'SoundCloud'],
+];
+const COLOR_FILTERS = ['all', 'none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
 /* ---------------- helpers ---------------- */
 
@@ -214,6 +234,156 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function trackTags(track) {
+  return (track.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function countBy(tracks, getter) {
+  const counts = new Map();
+  for (const track of tracks) {
+    const value = getter(track);
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return counts;
+}
+
+function tagCounts(tracks) {
+  const counts = new Map();
+  for (const track of tracks) {
+    for (const tag of trackTags(track)) {
+      counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function isFilteringLibrary() {
+  return Boolean(activeQuery) ||
+    libraryState.source !== 'all' ||
+    libraryState.color !== 'all' ||
+    libraryState.tag !== 'all' ||
+    libraryState.sort !== 'recent';
+}
+
+function resetLibraryFilters() {
+  libraryState.source = 'all';
+  libraryState.color = 'all';
+  libraryState.tag = 'all';
+  libraryState.sort = 'recent';
+  activeQuery = '';
+  input.value = '';
+  sortSelect.value = libraryState.sort;
+  closePredictions();
+  loadLibrary();
+}
+
+function renderFilterButton({ group, value, label, count, active, disabled = false, extraClass = '', title = '' }) {
+  const countHtml = Number.isFinite(count) ? `<span class="filter-count">${count}</span>` : '';
+  return `
+    <button
+      type="button"
+      class="filter-chip ${extraClass} ${active ? 'active' : ''}"
+      data-filter-group="${escapeHtml(group)}"
+      data-filter-value="${escapeHtml(value)}"
+      ${disabled ? 'disabled' : ''}
+      ${title ? `title="${escapeHtml(title)}"` : ''}
+    >
+      ${label}${countHtml}
+    </button>
+  `;
+}
+
+function renderLibraryNav(baseTracks, visibleTracks) {
+  const sourceCounts = countBy(baseTracks, track => track.source || 'unknown');
+  const colorCounts = countBy(baseTracks, track => track.color || 'none');
+  const allCount = baseTracks.length;
+  const filteredCount = visibleTracks.length;
+  const hasFilters = isFilteringLibrary();
+
+  librarySummaryEl.textContent = hasFilters
+    ? `${filteredCount} of ${allCount} tracks`
+    : `${allCount} ${allCount === 1 ? 'track' : 'tracks'}`;
+  libraryResetBtn.classList.toggle('visible', hasFilters);
+  sortSelect.value = libraryState.sort;
+
+  sourceFilterEl.innerHTML = SOURCE_FILTERS.map(([value, label]) => {
+    const count = value === 'all' ? allCount : (sourceCounts.get(value) || 0);
+    return renderFilterButton({
+      group: 'source',
+      value,
+      label: escapeHtml(label),
+      count,
+      active: libraryState.source === value,
+      disabled: value !== 'all' && count === 0 && libraryState.source !== value,
+    });
+  }).join('');
+
+  colorFilterEl.innerHTML = COLOR_FILTERS.map(color => {
+    const count = color === 'all' ? allCount : (colorCounts.get(color) || 0);
+    const label = color === 'all'
+      ? 'All'
+      : color === 'none'
+        ? 'None'
+        : `<span class="color-swatch color-${escapeHtml(color)}"></span><span class="sr-only">${escapeHtml(color)}</span>`;
+    return renderFilterButton({
+      group: 'color',
+      value: color,
+      label,
+      count,
+      active: libraryState.color === color,
+      disabled: color !== 'all' && count === 0 && libraryState.color !== color,
+      extraClass: color === 'all' || color === 'none' ? '' : 'color-filter-chip',
+      title: color === 'all' ? '' : color,
+    });
+  }).join('');
+
+  const tags = [...tagCounts(baseTracks).entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 8);
+  if (libraryState.tag !== 'all' && !tags.some(([tag]) => tag === libraryState.tag)) {
+    tags.push([libraryState.tag, 0]);
+  }
+
+  tagFilterEl.classList.toggle('hidden', tags.length === 0);
+  tagFilterEl.innerHTML = tags.map(([tag, count]) => renderFilterButton({
+    group: 'tag',
+    value: tag,
+    label: `#${escapeHtml(tag)}`,
+    count,
+    active: libraryState.tag === tag,
+    extraClass: 'tag-filter-chip',
+  })).join('');
+}
+
+function getFilteredTracks() {
+  const filtered = libraryState.tracks.filter(track => {
+    if (libraryState.source !== 'all' && track.source !== libraryState.source) return false;
+    if (libraryState.color !== 'all' && (track.color || 'none') !== libraryState.color) return false;
+    if (libraryState.tag !== 'all' && !trackTags(track).includes(libraryState.tag)) return false;
+    return true;
+  });
+
+  return filtered.sort((a, b) => {
+    if (libraryState.sort === 'title') {
+      return String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' });
+    }
+    if (libraryState.sort === 'duration') {
+      return (b.duration || 0) - (a.duration || 0) || (b.added_at || 0) - (a.added_at || 0);
+    }
+    if (libraryState.sort === 'source') {
+      return String(a.source || '').localeCompare(String(b.source || '')) ||
+        String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' });
+    }
+    return (b.added_at || 0) - (a.added_at || 0);
+  });
+}
+
+function renderLibraryView() {
+  const visibleTracks = getFilteredTracks();
+  renderLibraryNav(libraryState.tracks, visibleTracks);
+  renderLibrary(visibleTracks);
+}
+
 function fileRowHTML(track) {
   const thumb = track.thumbnail ? `style="background-image:url('${track.thumbnail}')"` : '';
   const icon = track.thumbnail ? '' : '♪';
@@ -242,7 +412,10 @@ function fileRowHTML(track) {
 
 function renderLibrary(tracks) {
   if (!tracks.length) {
-    fileListEl.innerHTML = `<div class="empty-state">Nothing here yet — pulled tracks land in this list.</div>`;
+    const message = libraryState.tracks.length
+      ? 'No tracks match the current filters.'
+      : 'Nothing here yet — pulled tracks land in this list.';
+    fileListEl.innerHTML = `<div class="empty-state">${message}</div>`;
     return;
   }
   fileListEl.innerHTML = tracks.map(fileRowHTML).join('');
@@ -285,8 +458,39 @@ function playTrack(row, filepath) {
 
 function loadLibrary() {
   const opts = activeQuery ? { query: activeQuery } : {};
-  window.current.getTracks(opts).then(renderLibrary);
+  window.current.getTracks(opts).then(tracks => {
+    libraryState.tracks = tracks;
+    renderLibraryView();
+  });
 }
+
+sourceFilterEl.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-filter-group]');
+  if (!button || button.disabled) return;
+  libraryState[button.dataset.filterGroup] = button.dataset.filterValue;
+  renderLibraryView();
+});
+
+colorFilterEl.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-filter-group]');
+  if (!button || button.disabled) return;
+  libraryState[button.dataset.filterGroup] = button.dataset.filterValue;
+  renderLibraryView();
+});
+
+tagFilterEl.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-filter-group]');
+  if (!button || button.disabled) return;
+  libraryState.tag = libraryState.tag === button.dataset.filterValue ? 'all' : button.dataset.filterValue;
+  renderLibraryView();
+});
+
+sortSelect.addEventListener('change', () => {
+  libraryState.sort = sortSelect.value;
+  renderLibraryView();
+});
+
+libraryResetBtn.addEventListener('click', resetLibraryFilters);
 
 let searchTimer;
 input.addEventListener('input', () => {

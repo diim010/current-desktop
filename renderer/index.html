@@ -38,6 +38,26 @@
   <div class="queue" id="queue"></div>
 
   <div class="glass panel">
+    <div class="panel-top library-nav">
+      <div class="library-nav-main">
+        <div class="library-heading">
+          <div class="library-title">Library</div>
+          <div class="library-summary" id="library-summary">Loading library</div>
+        </div>
+        <div class="library-tools">
+          <select id="sort-select" class="sort-select" aria-label="Sort library">
+            <option value="recent">Recent</option>
+            <option value="title">Title</option>
+            <option value="duration">Duration</option>
+            <option value="source">Source</option>
+          </select>
+          <button type="button" id="library-reset-btn" class="filter-reset">Reset</button>
+        </div>
+      </div>
+      <div class="filter-row source-filter" id="source-filter"></div>
+      <div class="filter-row color-filter" id="color-filter"></div>
+      <div class="filter-row tag-filter" id="tag-filter"></div>
+    </div>
     <div class="file-list" id="file-list">
       <div class="empty-state">Loading library…</div>
     </div>
