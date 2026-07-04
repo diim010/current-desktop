@@ -69,9 +69,32 @@ libraryPathEl.addEventListener('click', () => {
 });
 
 /* ---------------- pull-all bar ---------------- */
+const predictionLoader = document.getElementById('prediction-loader');
 const pullAllBar   = document.getElementById('pull-all-bar');
 const pullAllLabel = document.getElementById('pull-all-label');
 const pullAllBtn   = document.getElementById('pull-all-btn');
+
+function clearPredictionResults() {
+  predictionsDropdown.querySelectorAll('.prediction-row, .prediction-message').forEach(el => el.remove());
+}
+
+function closePredictions() {
+  predictionsDropdown.classList.remove('show');
+  if (predictionLoader) predictionLoader.classList.add('hidden');
+  clearPredictionResults();
+  selectedPredictions.clear();
+  updatePullAllBar();
+}
+
+function showPredictionMessage(message) {
+  clearPredictionResults();
+  if (predictionLoader) predictionLoader.classList.add('hidden');
+
+  const messageEl = document.createElement('div');
+  messageEl.className = 'prediction-loading prediction-message';
+  messageEl.textContent = message;
+  pullAllBar.before(messageEl);
+}
 
 function updatePullAllBar() {
   const n = selectedPredictions.size;
@@ -91,7 +114,7 @@ pullAllBtn.addEventListener('click', async () => {
   selectedPredictions.clear();
   updatePullAllBar();
   predictionsDropdown.classList.remove('show');
-  predictionsDropdown.innerHTML = '';
+  clearPredictionResults();
   input.value = '';
   activeQuery = '';
 
@@ -277,8 +300,7 @@ input.addEventListener('input', () => {
       activeQuery = '';
       loadLibrary();
     }
-    predictionsDropdown.classList.remove('show');
-    predictionsDropdown.innerHTML = '';
+    closePredictions();
   } else {
     pullBtn.classList.remove('visible');
     clearTimeout(searchTimer);
@@ -286,8 +308,7 @@ input.addEventListener('input', () => {
     if (!val) {
       activeQuery = '';
       loadLibrary();
-      predictionsDropdown.classList.remove('show');
-      predictionsDropdown.innerHTML = '';
+      closePredictions();
       return;
     }
 
@@ -311,16 +332,14 @@ async function fetchYoutubePredictions(query) {
   searchAbortController = new AbortController();
   const { signal } = searchAbortController;
 
-  // Show loader element
-  const loader = document.getElementById('prediction-loader');
-  if (loader) loader.classList.remove('hidden');
-  predictionsDropdown.innerHTML = '';
+  clearPredictionResults();
+  if (predictionLoader) predictionLoader.classList.remove('hidden');
   predictionsDropdown.classList.add('show');
 
   // Use cached results if available
   if (searchCache.has(query)) {
     const cachedResults = searchCache.get(query);
-    if (loader) loader.classList.add('hidden');
+    if (predictionLoader) predictionLoader.classList.add('hidden');
     renderPredictionResults(cachedResults);
     return;
   }
@@ -332,21 +351,24 @@ async function fetchYoutubePredictions(query) {
     searchCache.set(query, results);
 
     if (currentSearchQuery !== query) return; // stale response
-    if (loader) loader.classList.add('hidden');
+    if (predictionLoader) predictionLoader.classList.add('hidden');
 
     renderPredictionResults(results);
   } catch (err) {
     if (err.name === 'AbortError') return; // request was cancelled
     if (currentSearchQuery === query) {
-      predictionsDropdown.innerHTML = `<div class="prediction-loading">YouTube search failed.</div>`;
+      showPredictionMessage(err.message || 'YouTube search failed.');
     }
   }
 }
 
 // Helper to render prediction rows
 function renderPredictionResults(results) {
+  clearPredictionResults();
+  if (predictionLoader) predictionLoader.classList.add('hidden');
+
   if (!results || !results.length) {
-    predictionsDropdown.innerHTML = `<div class="prediction-loading">No YouTube results found.</div>`;
+    showPredictionMessage('No YouTube results found.');
     return;
   }
 
@@ -370,7 +392,6 @@ function renderPredictionResults(results) {
     `;
   }).join('');
 
-  // Insert rows before the pull-all-bar (which is a persistent DOM node)
   pullAllBar.insertAdjacentHTML('beforebegin', rowsHTML);
 
   predictionsDropdown.querySelectorAll('.prediction-row').forEach(row => {
@@ -405,7 +426,7 @@ function renderPredictionResults(results) {
           jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: item ? item.title : null });
           renderQueue();
           predictionsDropdown.classList.remove('show');
-          predictionsDropdown.innerHTML = '';
+          clearPredictionResults();
           selectedPredictions.clear();
           updatePullAllBar();
           input.value = '';
