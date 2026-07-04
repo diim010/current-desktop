@@ -43,7 +43,7 @@ graph TD
 
 ---
 
-## 2. Process Model & Security Boundary
+## 2. Process Model & Secu``rity Boundary
 
 Electron isolates high-risk operations (such as running shell processes or editing files) from the UI layer. Current strictly adheres to Electron security best practices:
 
