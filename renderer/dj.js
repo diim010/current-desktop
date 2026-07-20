@@ -80,52 +80,14 @@ async function initializeDeckStates() {
 }
 
 // Check connection status periodically
-let isConnected = false;
-function checkConnection() {
-  const statusEl = document.getElementById('connection-status');
-  if (statusEl) {
-    let text = '';
-    if (!isConnected && !midiConnected) {
-      text = 'Mixxx & MIDI: Disconnected';
-    } else if (isConnected && !midiConnected) {
-      text = 'Mixxx: Connected | MIDI: Disconnected';
-    } else if (midiConnected) {
-      text = 'Mixxx & MIDI: Connected';
-    }
-    statusEl.textContent = text;
-    statusEl.classList.toggle('connected', isConnected && midiConnected);
-  }
-}
 
-// Simulate connection for demo (remove when Mixxx is actually connected)
-setTimeout(() => {
-  isConnected = true;
-  checkConnection();
-  
-  // Demo: simulate some deck activity
-  setTimeout(() => {
-    deckStates[1] = {
-      playing: true,
-      title: 'Demo Track - Artist Name',
-      volume: 0.75,
-      playPosition: 0.3,
-      duration: 180,
-    };
-    updateDeckUI(1);
-  }, 2000);
-}, 3000);
 
 // Library view navigation
 document.getElementById('library-view-btn').addEventListener('click', () => {
   window.current.switchView('library');
 });
 
-// Listen for MIDI events
-ipcRenderer.on('midi-connected', (event, data) => {
-  midiConnected = true;
-  checkConnection();
-  console.log('[DJ UI] MIDI connected:', data);
-});
+
 
 ipcRenderer.on('midi-load-request', (event, data) => {
   const { deck } = data;
@@ -138,4 +100,4 @@ ipcRenderer.on('midi-load-request', (event, data) => {
 
 // Initialize on load
 initializeDeckStates();
-checkConnection();
+

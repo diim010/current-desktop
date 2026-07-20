@@ -2,6 +2,7 @@ const SOURCE_LABELS = {
   'youtube': 'YouTube',
   'youtube-music': 'YouTube Music',
   'soundcloud': 'SoundCloud',
+  'soulseek': 'Soulseek',
 };
 
 const form        = document.getElementById('universal-form');
@@ -22,6 +23,25 @@ const player      = document.getElementById('player');
 const npTitle     = document.getElementById('np-title');
 const npMeta      = document.getElementById('np-meta');
 const djViewBtn   = document.getElementById('dj-view-btn');
+
+// Preview Modal elements
+const previewModal     = document.getElementById('preview-modal');
+const previewThumb     = document.getElementById('preview-thumb');
+const previewTitle     = document.getElementById('preview-title');
+const previewArtist    = document.getElementById('preview-artist');
+const previewSource    = document.getElementById('preview-source');
+const previewDuration  = document.getElementById('preview-duration');
+const previewLoading   = document.getElementById('preview-loading');
+const previewWaveform  = document.getElementById('preview-waveform');
+const previewWaveformFill = document.getElementById('preview-waveform-fill');
+const previewCurrentTime = document.getElementById('preview-current-time');
+const previewTotalTime = document.getElementById('preview-total-time');
+const previewPlayBtn   = document.getElementById('preview-play-btn');
+const previewAudio     = document.getElementById('preview-audio');
+const previewCloseBtn  = document.getElementById('preview-close-btn');
+const previewPullBtn   = document.getElementById('preview-pull-btn');
+
+let currentPreviewItem = null; // track the item being previewed
 
 // Edit Modal elements
 const editModal        = document.getElementById('edit-modal');
@@ -50,6 +70,7 @@ const SOURCE_FILTERS = [
   ['youtube', 'YouTube'],
   ['youtube-music', 'Music'],
   ['soundcloud', 'SoundCloud'],
+  ['soulseek', 'Soulseek'],
 ];
 const COLOR_FILTERS = ['all', 'none', 'red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
@@ -590,6 +611,7 @@ function renderPredictionResults(results) {
           <div class="prediction-meta">${escapeHtml(meta)}</div>
         </div>
         <div class="prediction-actions">
+          <button class="prediction-preview-btn" title="Preview">▶</button>
           <button class="prediction-pull-btn">Pull</button>
         </div>
       </div>
@@ -602,10 +624,11 @@ function renderPredictionResults(results) {
     const url = row.dataset.url;
     const item = results.find(r => r.url === url);
     const rowPullBtn = row.querySelector('.prediction-pull-btn');
+    const rowPreviewBtn = row.querySelector('.prediction-preview-btn');
 
-    // Toggle selection on row click (anywhere except the Pull button)
+    // Toggle selection on row click (anywhere except buttons)
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.prediction-pull-btn')) return;
+      if (e.target.closest('.prediction-pull-btn') || e.target.closest('.prediction-preview-btn')) return;
       if (selectedPredictions.has(url)) {
         selectedPredictions.delete(url);
         row.classList.remove('selected');
@@ -617,6 +640,14 @@ function renderPredictionResults(results) {
       }
       updatePullAllBar();
     });
+
+    // Preview button — open preview modal
+    if (rowPreviewBtn) {
+      rowPreviewBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        openPreviewModal(item);
+      });
+    }
 
     // Individual Pull button — instant single download
     rowPullBtn.addEventListener('click', e => {
@@ -707,5 +738,273 @@ editModal.addEventListener('click', (e) => {
 djViewBtn.addEventListener('click', () => {
   window.current.switchView('dj');
 });
+
+/* ---------------- Preview Modal Logic ---------------- */
+
+function openPreviewModal(item) {
+  currentPreviewItem = item;
+
+  // Populate metadata
+  previewTitle.textContent = item.title || '—';
+  previewArtist.textContent = item.uploader || item.artist || '';
+  previewSource.textContent = SOURCE_LABELS[item.source] || 'YouTube';
+  previewDuration.textContent = item.duration ? fmtDuration(item.duration) : '';
+
+  if (item.thumbnail) {
+    previewThumb.style.backgroundImage = `url('${item.thumbnail}')`;
+  } else {
+    previewThumb.style.backgroundImage = '';
+  }
+
+  // Reset player state
+  previewAudio.pause();
+  previewAudio.src = '';
+  previewWaveformFill.style.width = '0%';
+  previewCurrentTime.textContent = '0:00';
+  previewTotalTime.textContent = item.duration ? fmtDuration(item.duration) : '0:00';
+  previewPlayBtn.classList.remove('playing');
+  previewPlayBtn.querySelector('.play-icon').textContent = '▶';
+
+  // Show loading, hide waveform
+  previewLoading.classList.remove('hidden');
+  previewWaveform.style.opacity = '0.3';
+
+  // Show modal
+  previewModal.classList.add('show');
+
+  // Fetch preview URL
+  const previewUrl = item.url;
+  window.current.getPreviewUrl(previewUrl)
+    .then(streamUrl => {
+      previewLoading.classList.add('hidden');
+      previewWaveform.style.opacity = '1';
+      previewAudio.src = streamUrl;
+      previewAudio.load();
+    })
+    .catch(err => {
+      previewLoading.classList.add('hidden');
+      previewWaveform.style.opacity = '1';
+      showError(`Preview failed: ${err.message}`);
+    });
+}
+
+function closePreviewModal() {
+  previewModal.classList.remove('show');
+  previewAudio.pause();
+  previewAudio.src = '';
+  previewPlayBtn.classList.remove('playing');
+  previewPlayBtn.querySelector('.play-icon').textContent = '▶';
+  currentPreviewItem = null;
+}
+
+previewPlayBtn.addEventListener('click', () => {
+  if (!previewAudio.src) return;
+  if (previewAudio.paused) {
+    previewAudio.play();
+    previewPlayBtn.classList.add('playing');
+    previewPlayBtn.querySelector('.play-icon').textContent = '❚❚';
+  } else {
+    previewAudio.pause();
+    previewPlayBtn.classList.remove('playing');
+    previewPlayBtn.querySelector('.play-icon').textContent = '▶';
+  }
+});
+
+previewAudio.addEventListener('timeupdate', () => {
+  if (!previewAudio.duration) return;
+  const pct = (previewAudio.currentTime / previewAudio.duration) * 100;
+  previewWaveformFill.style.width = `${pct}%`;
+  previewCurrentTime.textContent = fmtDuration(previewAudio.currentTime);
+  previewTotalTime.textContent = fmtDuration(previewAudio.duration);
+});
+
+previewAudio.addEventListener('ended', () => {
+  previewPlayBtn.classList.remove('playing');
+  previewPlayBtn.querySelector('.play-icon').textContent = '▶';
+  previewWaveformFill.style.width = '0%';
+  previewCurrentTime.textContent = '0:00';
+});
+
+// Click on waveform to seek
+previewWaveform.addEventListener('click', (e) => {
+  if (!previewAudio.duration) return;
+  const rect = previewWaveform.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  previewAudio.currentTime = pct * previewAudio.duration;
+});
+
+previewCloseBtn.addEventListener('click', closePreviewModal);
+
+previewPullBtn.addEventListener('click', () => {
+  if (!currentPreviewItem) return;
+  const item = currentPreviewItem;
+  closePreviewModal();
+
+  // If it's a soulseek item, use slsk download
+  if (item.source === 'soulseek') {
+    window.current.slskDownload({
+      user: item.user,
+      filepath: item.filepath,
+      title: item.title,
+      artist: item.artist,
+      duration: item.duration,
+    }).then(({ id, source }) => {
+      jobsById.set(id, { id, source, status: 'downloading', progress: 0, title: item.title });
+      renderQueue();
+    }).catch(err => showError(err.message));
+  } else {
+    // YouTube/SoundCloud — use queueDownload
+    window.current.queueDownload(item.url)
+      .then(({ id, source }) => {
+        jobsById.set(id, { id, source, status: 'fetching', progress: 0, title: item.title });
+        renderQueue();
+      })
+      .catch(err => showError(err.message));
+  }
+});
+
+previewModal.addEventListener('click', (e) => {
+  if (e.target === previewModal) closePreviewModal();
+});
+
+/* ---------------- Soulseek Search Integration ---------------- */
+
+let slskResults = [];
+let searchSourceTab = 'youtube'; // 'youtube' | 'soulseek'
+
+function renderSearchSourceTabs(ytCount, slskCount) {
+  // Check if tabs already exist, else create
+  let tabsEl = predictionsDropdown.querySelector('.search-source-tabs');
+  if (!tabsEl) {
+    tabsEl = document.createElement('div');
+    tabsEl.className = 'search-source-tabs';
+    predictionsDropdown.insertBefore(tabsEl, predictionsDropdown.firstChild);
+  }
+
+  tabsEl.innerHTML = `
+    <button class="search-source-tab ${searchSourceTab === 'youtube' ? 'active' : ''}" data-tab="youtube">
+      YouTube<span class="tab-count">${ytCount != null ? ytCount : ''}</span>
+    </button>
+    <button class="search-source-tab ${searchSourceTab === 'soulseek' ? 'active' : ''}" data-tab="soulseek">
+      Soulseek<span class="tab-count">${slskCount != null ? slskCount : '…'}</span>
+    </button>
+  `;
+
+  tabsEl.querySelectorAll('.search-source-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      searchSourceTab = tab.dataset.tab;
+      // Re-render
+      if (searchSourceTab === 'soulseek') {
+        renderSlskResults(slskResults);
+      } else {
+        const cachedYt = searchCache.get(currentSearchQuery);
+        if (cachedYt) renderPredictionResults(cachedYt);
+      }
+    });
+  });
+}
+
+function renderSlskResults(results) {
+  clearPredictionResults();
+  if (predictionLoader) predictionLoader.classList.add('hidden');
+
+  const ytCount = searchCache.has(currentSearchQuery) ? searchCache.get(currentSearchQuery).length : null;
+  renderSearchSourceTabs(ytCount, results.length);
+
+  if (!results || !results.length) {
+    const msg = document.createElement('div');
+    msg.className = 'prediction-loading prediction-message';
+    msg.textContent = 'No Soulseek results. Make sure you\'re connected in Settings.';
+    pullAllBar.before(msg);
+    return;
+  }
+
+  const rowsHTML = results.map(item => {
+    const bitrateStr = item.bitrate ? `${item.bitrate}kbps` : '';
+    const sizeStr = item.size ? fmtBytes(item.size) : '';
+    const durationStr = item.duration ? fmtDuration(item.duration) : '';
+    const meta = [item.user, bitrateStr, sizeStr, durationStr].filter(Boolean).join(' · ');
+    const ext = (item.filename || '').split('.').pop().toUpperCase();
+    return `
+      <div class="prediction-row" data-slsk-id="${escapeHtml(item.id)}">
+        <div class="prediction-thumb" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent-soundcloud)">${ext}</div>
+        <div class="prediction-info">
+          <div class="prediction-title">${escapeHtml(item.title)}</div>
+          <div class="prediction-meta">${escapeHtml(meta)}</div>
+        </div>
+        <div class="prediction-actions">
+          <button class="prediction-pull-btn">Pull</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  pullAllBar.insertAdjacentHTML('beforebegin', rowsHTML);
+
+  predictionsDropdown.querySelectorAll('.prediction-row[data-slsk-id]').forEach(row => {
+    const slskId = row.dataset.slskId;
+    const item = results.find(r => r.id === slskId);
+    const rowPullBtn = row.querySelector('.prediction-pull-btn');
+
+    rowPullBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      rowPullBtn.disabled = true;
+      rowPullBtn.textContent = '···';
+
+      window.current.slskDownload({
+        user: item.user,
+        filepath: item.filepath,
+        title: item.title,
+        artist: item.artist,
+        duration: item.duration,
+      }).then(({ id, source }) => {
+        jobsById.set(id, { id, source, status: 'downloading', progress: 0, title: item.title });
+        renderQueue();
+        predictionsDropdown.classList.remove('show');
+        clearPredictionResults();
+        input.value = '';
+        activeQuery = '';
+      }).catch(err => {
+        showError(err.message);
+        rowPullBtn.disabled = false;
+        rowPullBtn.textContent = 'Pull';
+      });
+    });
+  });
+}
+
+// Extend fetchYoutubePredictions to also search Soulseek
+const originalFetchYoutubePredictions = fetchYoutubePredictions;
+
+async function fetchSlskPredictions(query) {
+  try {
+    const status = await window.current.slskStatus();
+    if (status !== 'connected') {
+      slskResults = [];
+      return;
+    }
+    const results = await window.current.slskSearch(query);
+    slskResults = results || [];
+
+    // If we're on the soulseek tab, re-render
+    if (searchSourceTab === 'soulseek' && currentSearchQuery === query) {
+      renderSlskResults(slskResults);
+    }
+    // Update tab counts
+    const tabsEl = predictionsDropdown.querySelector('.search-source-tabs');
+    if (tabsEl) {
+      const slskTab = tabsEl.querySelector('[data-tab="soulseek"] .tab-count');
+      if (slskTab) slskTab.textContent = slskResults.length;
+    }
+  } catch (err) {
+    slskResults = [];
+    console.warn('[SLSK search]', err.message);
+  }
+}
+
+// Patch the input handler to also trigger slsk search
+const origSearchTimer = 'searchTimer';
+// We hook into the existing search flow — when YouTube search fires, also fire Soulseek
+const origRenderPredictionResults = renderPredictionResults;
 
 loadLibrary();

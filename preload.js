@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('current', {
   // Core APIs
   queueDownload: (url) => ipcRenderer.invoke('queue-download', url),
   searchYoutube: (query) => ipcRenderer.invoke('search-youtube', query),
+  getPreviewUrl: (url) => ipcRenderer.invoke('get-preview-url', url),
   getTracks: (opts) => ipcRenderer.invoke('get-tracks', opts),
   allTags: () => ipcRenderer.invoke('all-tags'),
   setTags: (id, tags) => ipcRenderer.invoke('set-tags', { id, tags }),
@@ -16,6 +17,12 @@ contextBridge.exposeInMainWorld('current', {
   setLibraryFolder: (dir) => ipcRenderer.invoke('set-library-folder', dir),
   getConfig: () => ipcRenderer.invoke('get-config'),
   setConfig: (partial) => ipcRenderer.invoke('set-config', partial),
+  // Soulseek APIs
+  slskConnect: (username, password) => ipcRenderer.invoke('slsk-connect', { username, password }),
+  slskDisconnect: () => ipcRenderer.invoke('slsk-disconnect'),
+  slskStatus: () => ipcRenderer.invoke('slsk-status'),
+  slskSearch: (query) => ipcRenderer.invoke('slsk-search', query),
+  slskDownload: (opts) => ipcRenderer.invoke('slsk-download', opts),
   // OSC APIs
   oscGetDeckState: (deckNum) => ipcRenderer.invoke('osc-get-deck-state', deckNum),
   oscGetAllDeckStates: () => ipcRenderer.invoke('osc-get-all-deck-states'),

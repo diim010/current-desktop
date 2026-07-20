@@ -107,6 +107,48 @@
   </div>
 </div>
 
+<!-- Preview Modal -->
+<div class="modal-overlay" id="preview-modal">
+  <div class="glass modal-card preview-modal-card">
+    <div class="preview-header">
+      <div class="preview-thumb" id="preview-thumb"></div>
+      <div class="preview-info">
+        <div class="preview-title" id="preview-title">—</div>
+        <div class="preview-artist" id="preview-artist"></div>
+        <div class="preview-meta-row">
+          <span class="preview-source" id="preview-source"></span>
+          <span class="preview-duration" id="preview-duration"></span>
+        </div>
+      </div>
+    </div>
+    <div class="preview-player-section">
+      <div class="preview-loading hidden" id="preview-loading">
+        <svg class="loader-spinner" viewBox="0 0 50 50">
+          <circle class="loader-circle" cx="25" cy="25" r="20" fill="none" stroke="var(--accent-cyan)" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <span>Loading preview…</span>
+      </div>
+      <div class="preview-waveform" id="preview-waveform">
+        <div class="preview-waveform-fill" id="preview-waveform-fill"></div>
+      </div>
+      <div class="preview-time-row">
+        <span id="preview-current-time">0:00</span>
+        <span id="preview-total-time">0:00</span>
+      </div>
+      <div class="preview-controls">
+        <button class="preview-play-btn" id="preview-play-btn" title="Play/Pause">
+          <span class="play-icon">▶</span>
+        </button>
+      </div>
+      <audio id="preview-audio"></audio>
+    </div>
+    <div class="modal-actions">
+      <button id="preview-close-btn">Close</button>
+      <button id="preview-pull-btn">Pull to Library</button>
+    </div>
+  </div>
+</div>
+
 <script src="renderer.js"></script>
 </body>
 </html>

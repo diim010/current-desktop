@@ -4,7 +4,8 @@ const fs = require('fs');
 const { randomUUID } = require('crypto');
 
 const db = require('./src/db');
-const { detectSource, fetchInfo, downloadAudio, searchYoutube } = require('./src/ytdlp');
+const { detectSource, fetchInfo, downloadAudio, searchYoutube, getPreviewUrl } = require('./src/ytdlp');
+const slsk = require('./src/slsk');
 const config = require('./src/config');
 const OSCServer = require('./src/osc-server');
 
@@ -12,7 +13,7 @@ let mainWindow;
 let database;
 let oscServer;
 
-const SOURCES = ['youtube', 'youtube-music', 'soundcloud'];
+const SOURCES = ['youtube', 'youtube-music', 'soundcloud', 'soulseek'];
 
 function libraryRoot() {
   // Default: ~/Music/Current — override via Settings (stored via electron-store).
@@ -269,6 +270,72 @@ ipcMain.handle('queue-download', async (event, url) => {
 
 ipcMain.handle('search-youtube', async (event, query) => {
   return await searchYoutube(query);
+});
+
+ipcMain.handle('get-preview-url', async (event, url) => {
+  return await getPreviewUrl(url);
+});
+
+/* ---- Soulseek IPC ---- */
+
+ipcMain.handle('slsk-connect', async (event, { username, password }) => {
+  await slsk.connect(username, password);
+  return slsk.getStatus();
+});
+
+ipcMain.handle('slsk-disconnect', async () => {
+  slsk.disconnect();
+  return slsk.getStatus();
+});
+
+ipcMain.handle('slsk-status', () => {
+  return slsk.getStatus();
+});
+
+ipcMain.handle('slsk-search', async (event, query) => {
+  return await slsk.search(query, { timeout: 5000 });
+});
+
+ipcMain.handle('slsk-download', async (event, { user, filepath, title, artist, duration }) => {
+  const jobId = randomUUID();
+  const outDir = libraryRoot();
+
+  (async () => {
+    try {
+      mainWindow.webContents.send('job-update', {
+        id: jobId, status: 'downloading', source: 'soulseek', progress: 0, title: title || path.basename(filepath),
+      });
+
+      const localPath = await slsk.download(user, filepath, outDir, (pct) => {
+        mainWindow.webContents.send('job-update', {
+          id: jobId, status: 'downloading', source: 'soulseek', progress: pct, title: title || path.basename(filepath),
+        });
+      });
+
+      const track = db.insertTrack(database, {
+        video_id: null,
+        source: 'soulseek',
+        title: title || path.basename(localPath, path.extname(localPath)),
+        artist: artist || null,
+        uploader: user,
+        duration: duration || null,
+        filepath: localPath,
+        thumbnail: null,
+        url: null,
+        tags: 'soulseek',
+      });
+
+      mainWindow.webContents.send('job-update', {
+        id: jobId, status: 'done', source: 'soulseek', progress: 100, title: track.title, track,
+      });
+    } catch (err) {
+      mainWindow.webContents.send('job-update', {
+        id: jobId, status: 'error', source: 'soulseek', progress: 0, message: err.message,
+      });
+    }
+  })();
+
+  return { id: jobId, source: 'soulseek' };
 });
 
 

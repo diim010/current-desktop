@@ -156,4 +156,31 @@ function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
   });
 }
 
-module.exports = { detectSource, fetchInfo, downloadAudio, searchYoutube };
+/**
+ * Get a direct audio stream URL for preview playback (no download).
+ * Uses yt-dlp to extract the best audio URL that can be played directly.
+ */
+function getPreviewUrl(url, ytdlpPath = YTDLP_PATH) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ytdlpPath, [
+      '-f', 'bestaudio',
+      '--get-url',
+      '--no-playlist',
+      '--no-warnings',
+      url,
+    ]);
+    let out = '';
+    let err = '';
+    proc.stdout.on('data', (d) => (out += d.toString()));
+    proc.stderr.on('data', (d) => (err += d.toString()));
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(err.trim() || `yt-dlp exited with ${code}`));
+      const streamUrl = out.trim().split('\n').filter(Boolean)[0];
+      if (!streamUrl) return reject(new Error('Could not extract audio stream URL.'));
+      resolve(streamUrl);
+    });
+  });
+}
+
+module.exports = { detectSource, fetchInfo, downloadAudio, searchYoutube, getPreviewUrl };
