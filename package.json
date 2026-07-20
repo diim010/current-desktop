@@ -7,20 +7,21 @@
   "author": "You",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "npx electron .", 
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "dist": "electron-builder --mac",
     "dist:win": "electron-builder --win"
   },
   "dependencies": {
-    "electron-store": "^8.1.0",
     "better-sqlite3": "^11.3.0",
+    "electron-store": "^8.1.0",
+    "jazz-midi": "^1.7.9",
     "node-osc": "^6.0.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
     "electron": "^31.0.0",
-    "electron-builder": "^24.13.3",
-    "@electron/rebuild": "^3.6.0"
+    "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "com.yourdomain.current",
@@ -33,13 +34,19 @@
     ],
     "mac": {
       "category": "public.app-category.music",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false
     },
     "win": {
-      "target": ["nsis", "zip"],
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker"
     },

@@ -5,6 +5,8 @@ let deckStates = {
   2: { playing: false, title: '', volume: 0, playPosition: 0, duration: 0 },
 };
 
+let midiConnected = false;
+
 // Format time in MM:SS
 function formatTime(seconds) {
   if (!seconds || seconds < 0) return '--:--';
@@ -82,8 +84,16 @@ let isConnected = false;
 function checkConnection() {
   const statusEl = document.getElementById('connection-status');
   if (statusEl) {
-    statusEl.textContent = isConnected ? 'Mixxx: Connected' : 'Mixxx: Disconnected';
-    statusEl.classList.toggle('connected', isConnected);
+    let text = '';
+    if (!isConnected && !midiConnected) {
+      text = 'Mixxx & MIDI: Disconnected';
+    } else if (isConnected && !midiConnected) {
+      text = 'Mixxx: Connected | MIDI: Disconnected';
+    } else if (midiConnected) {
+      text = 'Mixxx & MIDI: Connected';
+    }
+    statusEl.textContent = text;
+    statusEl.classList.toggle('connected', isConnected && midiConnected);
   }
 }
 
@@ -108,6 +118,22 @@ setTimeout(() => {
 // Library view navigation
 document.getElementById('library-view-btn').addEventListener('click', () => {
   window.current.switchView('library');
+});
+
+// Listen for MIDI events
+ipcRenderer.on('midi-connected', (event, data) => {
+  midiConnected = true;
+  checkConnection();
+  console.log('[DJ UI] MIDI connected:', data);
+});
+
+ipcRenderer.on('midi-load-request', (event, data) => {
+  const { deck } = data;
+  console.log('[DJ UI] MIDI load request for deck', deck);
+  // Highlight deck for track loading
+  document.querySelectorAll('.deck').forEach(d => d.classList.remove('loading'));
+  const deckEl = document.querySelector(`.deck:nth-child(${deck === 1 ? 1 : 3})`);
+  if (deckEl) deckEl.classList.add('loading');
 });
 
 // Initialize on load

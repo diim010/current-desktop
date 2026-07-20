@@ -1017,6 +1017,16 @@ button {
   border-color: rgba(105,245,212,0.34);
 }
 
+.deck.loading {
+  animation: deck-pulse 1s infinite;
+  border: 2px solid var(--accent-cyan);
+}
+
+@keyframes deck-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(105, 245, 212, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(105, 245, 212, 0); }
+}
+
 .track-info {
   padding: 16px;
   display: flex;

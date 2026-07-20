@@ -19,10 +19,15 @@ contextBridge.exposeInMainWorld('current', {
   // OSC APIs
   oscGetDeckState: (deckNum) => ipcRenderer.invoke('osc-get-deck-state', deckNum),
   oscGetAllDeckStates: () => ipcRenderer.invoke('osc-get-all-deck-states'),
+  // MIDI APIs
+  midiGetState: () => ipcRenderer.invoke('midi-get-state'),
+  midiSetLED: (deck, control, value) => ipcRenderer.invoke('midi-set-led', { deck, control, value }),
   // View switching
   switchView: (view) => ipcRenderer.invoke('switch-view', view),
   // Event listeners
   onJobUpdate: (cb) => ipcRenderer.on('job-update', (event, payload) => cb(payload)),
   onLibraryPathChanged: (cb) => ipcRenderer.on('library-path-changed', (event, path) => cb(path)),
   onOscDeckUpdate: (cb) => ipcRenderer.on('osc-deck-update', (event, data) => cb(data)),
+  onMidiConnected: (cb) => ipcRenderer.on('midi-connected', (event, data) => cb(data)),
+  onMidiLoadRequest: (cb) => ipcRenderer.on('midi-load-request', (event, data) => cb(data)),
 });
