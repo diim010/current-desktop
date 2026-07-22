@@ -130,3 +130,6 @@ ipcMain.handle('midi-send-led', (event, { deck, control, value }) => {
 - MIDI devices require system permissions (macOS: Accessibility/MIDI)
 - All IPC remains context-isolated (secure)
 - OSC server runs on localhost only (no external network)
+
+---
+[Back to Documentation Index](./README.md)

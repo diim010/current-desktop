@@ -25,7 +25,7 @@
 - `--glass-fill-strong`: `rgba(255,255,255,0.17)` - Strong glass fill
 - `--glass-border`: `rgba(255,255,255,0.23)` - Base glass border
 - `--glass-border-strong`: `rgba(255,255,255,0.36)` - Strong glass border
-- `--glass-highlight`: `rgba(255,255,255,0.62)` - Glass highlight
+- `--glass-highlight`: `rgba(212, 210, 210, 0.62)` - Glass highlight
 - `--glass-shadow`: `rgba(0,0,0,0.34)` - Glass shadow
 
 ## Typography
@@ -250,3 +250,6 @@ conic-gradient(from 150deg at 52% 48%, rgba(105,245,212,0.26), rgba(255,183,105,
 ```css
 linear-gradient(92deg, #ffffff 0%, #d7fff6 48%, #ffe1af 100%)
 ```
+
+---
+[Back to Documentation Index](./README.md)

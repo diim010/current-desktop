@@ -91,3 +91,6 @@
 - [ ] <5ms input-to-audio-latency for jog wheels
 - [ ] Controller disconnection handled gracefully
 - [ ] Settings persist across restarts
+
+---
+[Back to Documentation Index](./README.md)

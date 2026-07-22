@@ -1,5 +1,7 @@
 # Current — macOS app
 
+[📚 Read the Documentation](./docs/README.md)
+
 A native-feeling macOS app (Electron + vibrancy) that pulls audio from
 YouTube, YouTube Music, and SoundCloud, converts to MP3 via yt-dlp, and
 keeps a searchable, taggable local library (SQLite) with built-in playback.
