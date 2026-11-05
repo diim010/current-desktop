@@ -4,18 +4,24 @@
 
 ### Electron Application Structure
 ```
-main.js              - Main process, window management, OSC server init
+main.js              - Main process, window management, download IPC
 ├── src/
-│   ├── osc-server.js   - OSC communication with Mixxx (port 7777)
-│   ├── db.js           - SQLite database for track library
+│   ├── db.js           - SQLite database for track library, including album metadata
+│   ├── library-files.js - Recursive local audio indexing and metadata/artwork reads
+│   ├── audio-formats.js - Shared audio format allowlist
 │   ├── ytdlp.js          - YouTube/SoundCloud track fetching
 │   └── config.js         - App configuration management
 └── renderer/
-    ├── dj.html/dj.js     - DJ view: deck visualization
-    ├── index.html/js     - Library view: track management
+    ├── index.html/js     - Four-pane library, import, search, and playback
     ├── settings.html/js  - Settings panel
-    └── style.css         - Design system with glass morphism
+    └── style.css         - Master Tape Ledger design system
 ```
+
+### Library Workspace
+
+The desktop renderer presents source/tag taxonomy, artist index, album and track groups, and the current player as four adjacent panes. At narrow widths those same panes become tabs with a persistent compact player. Downloaded release metadata is stored in the optional `tracks.album` column; older rows remain valid and display as unfiled recordings.
+
+On the first library request and after the cache expires, `main.js` scans only the configured library directory, recursively indexes supported audio files, and synchronizes them into SQLite. The scanner ignores symlinks, deduplicates by resolved file path against downloaded tracks, and reads tags with `music-metadata`; embedded artwork is fetched lazily and capped to safe image formats and sizes. Local rows are marked as not app-managed: removing them from Current hides the entry while preserving the original file. Directory or metadata read issues are logged and surfaced without preventing accessible files from loading.
 
 ## DDJ SR Controller Mapping
 
@@ -38,8 +44,6 @@ src/midi-server.js (NEW)
 #### 2. Controller State Bridge
 ```
 MIDI Input → Controller State → OSC Output → Mixxx
-                    ↓
-              IPC → DJ View (UI feedback)
 ```
 
 #### 3. Deck Mapping (DDJ SR to Mixxx)
@@ -55,38 +59,14 @@ MIDI Input → Controller State → OSC Output → Mixxx
 | Gain Knob           | /mixxx/deck/[1-2]/gain    | Per-channel gain |
 | Crossfader          | /mixxx/master/crossfader  | Mix blend |
 | Headphone Cue       | /mixxx/deck/[1-2]/pfl   | Pre-fade listen |
-| Load A/B            | /mixxx/deck/[1-2]/load    | Track load |
 | Performance Pads A/B| /mixxx/deck/[1-2]/pads/[1-8] | Hot cues/loops |
 
 ### Data Flow Architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│ DDJ SR MIDI  │────▶│ MIDI Server  │────▶│ OSC Server   │────▶│ Mixxx        │
-└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-                             │                    │                    │
-                             └────────────────────┼────────────────────┘
-                                                  │                    │
-                                           ┌──────▼──────┐     ┌─────▼──────┐
-                                           │ DJ View UI  │◀────│ OSC Events │
-                                           └─────────────┘     └────────────┘
-```
-
-### Library Integration
-
-#### Controller-Aware Features
-- Waveform zoom synchronized with jog wheel
-- Pad color feedback for hot cues (RGB LED control)
-- Deck status LEDs (play/pause/cue states)
-- Track loading via Load buttons triggers library search
-
-#### Enhanced UI Feedback
-```
-dj.js enhancements:
-- Request library tracks by deck (for load buttons)
-- Display controller connection status
-- Visual feedback for pad triggers
-- Waveform interaction for jog sync
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│ DDJ SR MIDI  │────▶│ MIDI Server  │────▶│ Mixxx (OSC) │
+└──────────────┘     └──────────────┘     └──────────────┘
 ```
 
 ### Configuration Schema

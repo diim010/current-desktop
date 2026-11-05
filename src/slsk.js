@@ -7,6 +7,7 @@
  * Requires a Soulseek account (username + password) stored in config.
  */
 const path = require('path');
+const { isSupportedAudioFile } = require('./audio-formats');
 const fs = require('fs');
 
 let slsk = null;
@@ -108,8 +109,7 @@ function search(query, opts = {}) {
     }, (err, results) => {
       if (err) return reject(new Error(`Soulseek search failed: ${err.message || err}`));
 
-      // Flatten + filter: only keep audio files (mp3, flac, ogg, wav, m4a, aac)
-      const audioExtensions = new Set(['.mp3', '.flac', '.ogg', '.wav', '.m4a', '.aac', '.opus', '.wma']);
+      // Flatten + filter to the same formats indexed by the local library.
       const flatResults = [];
 
       for (const result of (results || [])) {
@@ -118,8 +118,7 @@ function search(query, opts = {}) {
         const queueLength = result.slotsfree != null ? (result.slotsfree > 0 ? 0 : 1) : null;
 
         for (const file of (result.files || [])) {
-          const ext = path.extname(file.file || '').toLowerCase();
-          if (!audioExtensions.has(ext)) continue;
+          if (!isSupportedAudioFile(file.file || '')) continue;
 
           const filename = path.basename(file.file || '');
           const dir = path.dirname(file.file || '');

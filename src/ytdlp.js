@@ -21,7 +21,8 @@ function resolveBin(name) {
 }
 
 const YTDLP_PATH = resolveBin('yt-dlp');
-const FFMPEG_DIR = path.dirname(resolveBin('ffmpeg'));
+const FFMPEG_PATH = resolveBin('ffmpeg');
+const FFMPEG_DIR = fs.existsSync(FFMPEG_PATH) ? path.dirname(FFMPEG_PATH) : null;
 
 function detectSource(url) {
   const u = url.toLowerCase();
@@ -65,58 +66,83 @@ function downloadAudio(url, outDir, onProgress, ytdlpPath = YTDLP_PATH) {
     const args = [
       '-x', '--audio-format', 'mp3', '--audio-quality', '0',
       '--embed-metadata', '--embed-thumbnail',
-      '--ffmpeg-location', FFMPEG_DIR,
       '--no-playlist', '--no-warnings', '--newline',
       '-o', path.join(outDir, '%(title)s.%(ext)s'),
       '--print', 'after_move:%(filepath)s',
       url,
     ];
+    if (FFMPEG_DIR) {
+      args.push('--ffmpeg-location', FFMPEG_DIR);
+    }
 
     const proc = spawn(ytdlpPath, args);
     let finalPath = '';
     let stderrBuf = '';
     let stdoutBuf = '';
+    let stderrLineBuf = '';
+    let lastProgress = null;
+
+    function handleProgress(line) {
+      const progressMatch = line.match(/\[download\]\s+([\d.]+)%/);
+      if (progressMatch) {
+        lastProgress = parseFloat(progressMatch[1]);
+        onProgress(lastProgress);
+      }
+    }
+
+    function consumeLines(buffer, chunk, onLine) {
+      const lines = (buffer + chunk).split(/\r\n|\n|\r/);
+      const remainder = lines.pop();
+      lines.forEach(onLine);
+      return remainder;
+    }
 
     proc.stdout.on('data', (d) => {
-      stdoutBuf += d.toString();
-      const lines = stdoutBuf.split('\n');
-      stdoutBuf = lines.pop(); // keep partial line for next chunk
-
-      for (const line of lines) {
-        const progressMatch = line.match(/\[download\]\s+([\d.]+)%/);
-        if (progressMatch) {
-          onProgress(parseFloat(progressMatch[1]));
-          continue;
-        }
+      stdoutBuf = consumeLines(stdoutBuf, d.toString(), (line) => {
+        handleProgress(line);
         // --print after_move:%(filepath)s prints the final path on its own line
         if (line.trim().toLowerCase().endsWith('.mp3')) {
           finalPath = line.trim();
         }
-      }
+      });
     });
 
-    proc.stderr.on('data', (d) => (stderrBuf += d.toString()));
+    proc.stderr.on('data', (d) => {
+      const chunk = d.toString();
+      stderrBuf += chunk;
+      stderrLineBuf = consumeLines(stderrLineBuf, chunk, handleProgress);
+    });
     proc.on('error', reject);
     proc.on('close', (code) => {
+      if (stdoutBuf) {
+        handleProgress(stdoutBuf);
+        if (stdoutBuf.trim().toLowerCase().endsWith('.mp3')) {
+          finalPath = stdoutBuf.trim();
+        }
+      }
+      if (stderrLineBuf) handleProgress(stderrLineBuf);
       if (code !== 0) {
         return reject(new Error(stderrBuf.trim() || `yt-dlp exited with ${code}`));
       }
       if (!finalPath) {
         return reject(new Error('Download finished but no output file was reported.'));
       }
-      onProgress(100);
+      if (lastProgress !== 100) onProgress(100);
       resolve(finalPath);
     });
   });
 }
 
 function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
+  const searchTerm = query.trim();
+  if (!searchTerm) return Promise.resolve([]);
+
   return new Promise((resolve, reject) => {
     const proc = spawn(ytdlpPath, [
-      `ytsearch5:${query}`,
       '--dump-json',
       '--flat-playlist',
       '--no-warnings',
+      `ytsearch5:${searchTerm}`,
     ]);
     let out = '';
     let err = '';
@@ -136,7 +162,10 @@ function searchYoutube(query, ytdlpPath = YTDLP_PATH) {
             results.push({
               id: item.id,
               title: item.title,
-              url: item.url || item.webpage_url,
+              url: item.webpage_url ||
+                item.original_url ||
+                (typeof item.url === 'string' && /^https?:\/\//i.test(item.url) ? item.url : null) ||
+                (item.id ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.id)}` : null),
               uploader: item.uploader || item.channel,
               duration: item.duration,
               thumbnail: item.thumbnail ||
