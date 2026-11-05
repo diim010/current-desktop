@@ -7,17 +7,72 @@ const db = require('./src/db');
 const { detectSource, fetchInfo, downloadAudio, searchYoutube, getPreviewUrl } = require('./src/ytdlp');
 const slsk = require('./src/slsk');
 const config = require('./src/config');
-const OSCServer = require('./src/osc-server');
+const { isPathWithin, readTrackArtwork, scanLibraryFiles } = require('./src/library-files');
 
 let mainWindow;
 let database;
-let oscServer;
+let libraryScanCache = null;
+let libraryScanPromise = null;
+const LIBRARY_SCAN_CACHE_MS = 15000;
 
 const SOURCES = ['youtube', 'youtube-music', 'soundcloud', 'soulseek'];
 
 function libraryRoot() {
   // Default: ~/Music/Current — override via Settings (stored via electron-store).
   return config.get('libraryPath') || path.join(app.getPath('music'), 'Current');
+}
+
+function invalidateLibraryScan() {
+  libraryScanCache = null;
+}
+
+async function syncLocalLibrary() {
+  const root = path.resolve(libraryRoot());
+  if (libraryScanCache?.root === root && Date.now() - libraryScanCache.scannedAt < LIBRARY_SCAN_CACHE_MS) {
+    return libraryScanCache;
+  }
+
+  if (libraryScanPromise) {
+    await libraryScanPromise;
+    if (libraryScanCache?.root === root && Date.now() - libraryScanCache.scannedAt < LIBRARY_SCAN_CACHE_MS) {
+      return libraryScanCache;
+    }
+  }
+
+  const scanDatabase = database;
+  const scanPromise = (async () => {
+    const scan = await scanLibraryFiles(root);
+    if (scanDatabase !== database || path.resolve(libraryRoot()) !== root) return null;
+
+    db.syncLocalTracks(scanDatabase, scan.tracks, scan.complete);
+    libraryScanCache = { ...scan, scannedAt: Date.now() };
+
+    if (scan.errors.length || scan.metadataErrors) {
+      for (const { directory, error } of scan.errors) {
+        console.warn(`[Library] Could not scan ${directory}: ${error.message}`);
+      }
+      if (scan.metadataErrors) {
+        console.warn(`[Library] Could not read audio metadata for ${scan.metadataErrors} file(s).`);
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('library-scan-warning', {
+          directoryErrors: scan.errors.length,
+          metadataErrors: scan.metadataErrors,
+        });
+      }
+    }
+
+    return libraryScanCache;
+  })();
+  libraryScanPromise = scanPromise;
+
+  let scan;
+  try {
+    scan = await scanPromise;
+  } finally {
+    if (libraryScanPromise === scanPromise) libraryScanPromise = null;
+  }
+  return scan || syncLocalLibrary();
 }
 
 function ensureLibraryFolders() {
@@ -27,7 +82,7 @@ function ensureLibraryFolders() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 760,
+    width: 1400,
     height: 900,
     minWidth: 520,
     minHeight: 640,
@@ -43,11 +98,6 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-}
-
-function switchView(view) {
-  const viewFile = view === 'dj' ? 'dj.html' : 'index.html';
-  mainWindow.loadFile(path.join(__dirname, 'renderer', viewFile));
 }
 
 function buildMenu() {
@@ -70,6 +120,7 @@ function buildMenu() {
               try {
                 // Change database location and reinitialize
                 database = db.changeUserDirectory(newPath);
+                invalidateLibraryScan();
                 console.log('[App] Library moved to', newPath);
               } catch (e) {
                 console.error('[App] Failed to change library folder:', e);
@@ -79,9 +130,6 @@ function buildMenu() {
           },
         },
         { label: 'Settings', click: () => { createSettingsWindow(); } },
-        { type: 'separator' },
-        { label: 'Library View', click: () => { switchView('library'); } },
-        { label: 'DJ View', click: () => { switchView('dj'); } },
         { type: 'separator' },
         { role: 'quit' },
       ],
@@ -113,10 +161,7 @@ app.whenReady().then(() => {
   
   buildMenu();
   createWindow();
-  
-  // Start OSC server for Mixxx communication after window is created
-  oscServer = new OSCServer(7777, mainWindow);
-  oscServer.start();
+
   // Settings window placeholder
   let settingsWindow = null;
 function createSettingsWindow() {
@@ -145,9 +190,6 @@ function createSettingsWindow() {
 });
 
 app.on('window-all-closed', () => {
-  if (oscServer) {
-    oscServer.stop();
-  }
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -167,6 +209,7 @@ ipcMain.handle('choose-library-folder', async () => {
     ensureLibraryFolders();
     try {
       database = db.changeUserDirectory(newPath);
+      invalidateLibraryScan();
       console.log('[App] Library moved to', newPath);
     } catch (e) {
       console.error('[App] Failed to change library folder:', e);
@@ -183,6 +226,7 @@ ipcMain.handle('set-library-folder', async (event, newPath) => {
   ensureLibraryFolders();
   try {
     database = db.changeUserDirectory(newPath);
+    invalidateLibraryScan();
     console.log('[App] Library changed via Settings to', newPath);
   } catch (e) {
     console.error('[App] Failed to change library folder via Settings:', e);
@@ -247,6 +291,7 @@ ipcMain.handle('queue-download', async (event, url) => {
         source,
         title: info ? info.title : path.basename(filepath, '.mp3'),
         artist: info ? (info.artist || info.uploader || null) : null,
+        album: info ? (info.album || info.release_title || null) : null,
         uploader: info ? info.uploader : null,
         duration: info ? Math.round(info.duration || 0) : null,
         filepath,
@@ -347,9 +392,35 @@ ipcMain.handle('set-config', (event, partial) => {
   return config.getAll();
 });
 
-ipcMain.handle('get-tracks', (event, { source, query } = {}) => {
-  if (query && query.trim()) return db.searchTracks(database, query.trim());
-  return db.getTracks(database, source);
+ipcMain.handle('get-tracks', async (event, { source, query } = {}) => {
+  await syncLocalLibrary();
+  const root = path.resolve(libraryRoot());
+  const tracks = query && query.trim()
+    ? db.searchTracks(database, query.trim())
+    : db.getTracks(database, source);
+
+  return tracks.filter(track => track.source !== 'local' || isPathWithin(root, track.filepath));
+});
+
+ipcMain.handle('get-track-artwork', async (event, filepath) => {
+  const scan = await syncLocalLibrary();
+  if (typeof filepath !== 'string' || !filepath) {
+    throw new Error('A local file path is required to read artwork.');
+  }
+  const resolvedPath = path.resolve(filepath);
+  if (!isPathWithin(scan.root, resolvedPath) || !scan.tracks.some(track => track.filepath === resolvedPath)) {
+    throw new Error('Artwork is only available for files in the selected library folder.');
+  }
+
+  try {
+    return await readTrackArtwork(resolvedPath);
+  } catch (error) {
+    console.warn(`[Library] Could not read artwork from ${resolvedPath}: ${error.message}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('library-scan-warning', { artworkErrors: 1 });
+    }
+    return null;
+  }
 });
 
 ipcMain.handle('all-tags', () => db.allTags(database));
@@ -360,7 +431,7 @@ ipcMain.handle('set-color', (event, { id, color }) => db.setColor(database, id, 
 
 ipcMain.handle('delete-track', (event, id) => {
   const track = db.deleteTrack(database, id);
-  if (track && track.filepath && fs.existsSync(track.filepath)) {
+  if (track && track.managed_file !== 0 && track.filepath && fs.existsSync(track.filepath)) {
     fs.unlinkSync(track.filepath);
   }
   return true;
@@ -372,24 +443,4 @@ ipcMain.handle('reveal-in-finder', (event, filepath) => {
 
 ipcMain.handle('open-library-folder', () => {
   shell.openPath(libraryRoot());
-});
-
-// OSC-related IPC handlers
-ipcMain.handle('osc-get-deck-state', (event, deckNum) => {
-  if (oscServer) {
-    return oscServer.getDeckState(deckNum);
-  }
-  return null;
-});
-
-ipcMain.handle('osc-get-all-deck-states', () => {
-  if (oscServer) {
-    return oscServer.getAllDeckStates();
-  }
-  return null;
-});
-
-// View switching
-ipcMain.handle('switch-view', (event, view) => {
-  switchView(view);
 });

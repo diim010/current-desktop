@@ -91,9 +91,6 @@ try {
           case 0x19: // Sync
             this.sendOSC(`/mixxx/deck/${deckNum}/sync`, value > 0 ? 1 : 0);
             break;
-          case 0x1A: // Load
-            this.notifyRenderer('midi-load-request', { deck: deckNum });
-            break;
           default:
             if (control >= 0x20 && control <= 0x27) { // Performance Pads 1-8
               const padNum = control - 0x1f;

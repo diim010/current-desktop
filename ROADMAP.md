@@ -16,7 +16,6 @@
 - [ ] Map cue buttons to OSC cue messages
 - [ ] Map volume faders to OSC volume messages
 - [ ] Map tempo sliders to BPM adjustment
-- [ ] Update DJ view with controller connection status
 
 ## Phase 2: Mixer & Effects (v1.2)
 **Goal: Full mixer control and basic effects**

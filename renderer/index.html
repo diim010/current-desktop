@@ -1,154 +1,205 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Current</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Current</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="titlebar-spacer"></div>
+  <div class="shell">
+    <!-- Direction: Master Tape Ledger. A saved track is a source-marked entry in a personal listening archive. Use matte warm-white log sheets, ink-blue index structure, sulfur-yellow selection marks, and signal-red actions; reserve the right pane for large cover art with floating current-track information. Keep the four desktop columns explicit and adapt them into named, switchable panes on narrow windows. -->
+    <header class="masthead">
+      <div class="brand">
+        <h1>Current</h1>
+        <p>Library folder <button type="button" id="library-path" class="clickable-path" title="Choose another library folder">~/Music/Current</button></p>
+      </div>
+      <div class="masthead-note" id="library-summary">Loading library</div>
+    </header>
 
-<div class="titlebar-spacer"></div>
-
-<div class="shell">
-
-  <div class="brand">
-    <h1>Current</h1>
-    <p>Pulling into <span id="library-path" class="clickable-path" title="Click to choose another folder…">~/Music/Current</span></p>
-    <button id="dj-view-btn" class="liquid-button secondary">Switch to DJ View</button>
-  </div>
-
-
-  <form id="universal-form" class="glass composer">
-    <input type="text" id="universal-input" placeholder="Search library or paste link to pull..." autocomplete="off">
-    <button type="submit" id="pull-btn" class="pull-button">Pull</button>
-  </form>
-  <div id="predictions-dropdown" class="predictions-dropdown glass">
-  <div id="prediction-loader" class="prediction-loading hidden">
-    <svg class="loader-spinner" viewBox="0 0 50 50">
-      <circle class="loader-circle" cx="25" cy="25" r="20" fill="none" stroke="var(--text-faint)" stroke-width="4" stroke-linecap="round"/>
-    </svg>
-  </div>
-  <div id="pull-all-bar" class="pull-all-bar">
-    <span class="pull-all-label" id="pull-all-label">0 selected</span>
-    <button class="pull-all-btn" id="pull-all-btn">Pull All</button>
-  </div>
-</div>
-  <div class="error-banner" id="error-banner"></div>
-
-  <div class="queue" id="queue"></div>
-
-  <div class="glass panel">
-    <div class="panel-top library-nav">
-      <div class="library-nav-main">
-        <div class="library-heading">
-          <div class="library-title">Library</div>
-          <div class="library-summary" id="library-summary">Loading library</div>
+    <section class="import-desk">
+      <form id="universal-form" class="composer">
+        <label class="sr-only" for="universal-input">Search library or paste a music link</label>
+        <input type="text" id="universal-input" placeholder="Search your library or paste a YouTube / SoundCloud link" autocomplete="off">
+        <button type="submit" id="pull-btn" class="pull-button" tabindex="-1">Pull</button>
+      </form>
+      <div id="predictions-dropdown" class="predictions-dropdown">
+        <div id="prediction-loader" class="prediction-loading hidden">
+          <svg class="loader-spinner" viewBox="0 0 50 50">
+            <circle class="loader-circle" cx="25" cy="25" r="20" fill="none" stroke="var(--text-faint)" stroke-width="4" stroke-linecap="round"/>
+          </svg>
         </div>
-        <div class="library-tools">
-          <select id="sort-select" class="sort-select" aria-label="Sort library">
+        <div class="pull-all-bar" id="pull-all-bar">
+          <span class="pull-all-label" id="pull-all-label">0 selected</span>
+          <button class="pull-all-btn" id="pull-all-btn">Pull All</button>
+        </div>
+      </div>
+      <div class="error-banner" id="error-banner" role="status" aria-live="polite"></div>
+      <div class="queue" id="queue"></div>
+    </section>
+
+    <nav class="workspace-tabs" id="workspace-tabs" role="tablist" aria-label="Library panes">
+      <button type="button" id="pane-tab-taxonomy" class="workspace-tab active" role="tab" aria-selected="true" aria-controls="pane-taxonomy" data-pane="taxonomy">Index</button>
+      <button type="button" id="pane-tab-artists" class="workspace-tab" role="tab" aria-selected="false" aria-controls="pane-artists" data-pane="artists" tabindex="-1">Artists</button>
+      <button type="button" id="pane-tab-catalog" class="workspace-tab" role="tab" aria-selected="false" aria-controls="pane-catalog" data-pane="catalog" tabindex="-1">Albums &amp; tracks</button>
+      <button type="button" id="pane-tab-player" class="workspace-tab" role="tab" aria-selected="false" aria-controls="pane-player" data-pane="player" tabindex="-1">Playing</button>
+    </nav>
+
+    <main class="library-workspace">
+      <aside class="library-pane taxonomy-pane mobile-active" id="pane-taxonomy" role="tabpanel" aria-labelledby="pane-tab-taxonomy" tabindex="0" data-pane-content="taxonomy">
+        <div class="pane-heading">
+          <h2>Sources &amp; tags</h2>
+          <button type="button" id="library-reset-btn" class="filter-reset">Reset</button>
+        </div>
+        <section class="taxonomy-group">
+          <h3>Source</h3>
+          <div class="filter-row source-filter" id="source-filter"></div>
+        </section>
+        <section class="taxonomy-group">
+          <h3>Color markers</h3>
+          <div class="filter-row color-filter" id="color-filter"></div>
+        </section>
+        <section class="taxonomy-group">
+          <h3>Tags</h3>
+          <div class="filter-row tag-filter" id="tag-filter"></div>
+          <p class="taxonomy-empty hidden" id="tag-empty">Tags you add to tracks will be indexed here.</p>
+        </section>
+      </aside>
+
+      <section class="library-pane artists-pane" id="pane-artists" role="tabpanel" aria-labelledby="pane-tab-artists" tabindex="0" data-pane-content="artists">
+        <div class="pane-heading">
+          <h2>Artists</h2>
+          <span class="pane-count" id="artist-count">0</span>
+        </div>
+        <div class="artist-list" id="artist-list">
+          <div class="empty-state">Loading artists…</div>
+        </div>
+      </section>
+
+      <section class="library-pane catalog-pane" id="pane-catalog" role="tabpanel" aria-labelledby="pane-tab-catalog" tabindex="0" data-pane-content="catalog">
+        <div class="pane-heading catalog-heading">
+          <div>
+            <h2>Albums &amp; tracks</h2>
+            <p class="pane-caption" id="catalog-context">All artists</p>
+          </div>
+          <label class="sr-only" for="sort-select">Sort tracks</label>
+          <select id="sort-select" class="sort-select" aria-label="Sort tracks">
             <option value="recent">Recent</option>
             <option value="title">Title</option>
             <option value="duration">Duration</option>
             <option value="source">Source</option>
           </select>
-          <button type="button" id="library-reset-btn" class="filter-reset">Reset</button>
+        </div>
+        <div class="file-list" id="file-list">
+          <div class="empty-state">Loading library…</div>
+        </div>
+      </section>
+
+      <aside class="library-pane player-pane" id="pane-player" role="tabpanel" aria-labelledby="pane-tab-player" tabindex="0" data-pane-content="player">
+        <div class="pane-heading">
+          <h2>Now playing</h2>
+          <span class="recording-mark" aria-hidden="true"></span>
+        </div>
+        <div class="player-art-shell" id="player-art">
+            <div class="player-cover" id="player-cover" aria-hidden="true" hidden></div>
+          <div class="player-cover-placeholder" id="player-cover-placeholder" aria-hidden="true">C</div>
+          <div class="player-float">
+            <div class="np-title" id="np-title">Choose a track</div>
+            <div class="np-meta" id="np-meta">Your local library, ready when you are</div>
+          </div>
+        </div>
+        <div class="player-measure">
+          <span class="np-time" id="np-time">0:00 / 0:00</span>
+          <div class="np-progress" id="np-progress" role="slider" tabindex="0" aria-label="Seek track" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0:00 of 0:00">
+            <div class="np-progress-fill" id="np-progress-fill"></div>
+          </div>
+        </div>
+        <audio id="player" controls preload="metadata" aria-label="Track playback"></audio>
+        <p class="player-footnote" id="player-footnote">Select a recording from the catalog to listen.</p>
+      </aside>
+    </main>
+  </div>
+
+  <div class="mobile-now-playing" id="mobile-now-playing" hidden>
+      <div class="mobile-cover" id="mobile-cover" aria-hidden="true" hidden></div>
+    <div class="mobile-track-info">
+      <div class="mobile-track-title" id="mobile-title"></div>
+      <div class="mobile-track-artist" id="mobile-artist"></div>
+    </div>
+    <button type="button" class="mobile-play-toggle" id="mobile-play-toggle" aria-label="Play or pause current track">Play</button>
+    <div class="mobile-progress" id="mobile-progress"><span id="mobile-progress-fill"></span></div>
+  </div>
+
+  <div class="modal-overlay" id="edit-modal" inert aria-hidden="true">
+    <div class="glass modal-card" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title" tabindex="-1">
+      <h3 id="edit-modal-title">Edit track info</h3>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="modal-tags-input">Tags (comma separated)</label>
+          <input type="text" id="modal-tags-input" placeholder="e.g. lo-fi, chill, favorite" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <span id="color-picker-label">Color marker</span>
+          <div class="color-picker" id="modal-color-picker" role="group" aria-labelledby="color-picker-label">
+            <button type="button" class="color-option color-none selected" data-color="none" aria-label="No color" aria-pressed="true"></button>
+            <button type="button" class="color-option color-red" data-color="red" aria-label="Red" aria-pressed="false"></button>
+            <button type="button" class="color-option color-orange" data-color="orange" aria-label="Orange" aria-pressed="false"></button>
+            <button type="button" class="color-option color-yellow" data-color="yellow" aria-label="Yellow" aria-pressed="false"></button>
+            <button type="button" class="color-option color-green" data-color="green" aria-label="Green" aria-pressed="false"></button>
+            <button type="button" class="color-option color-blue" data-color="blue" aria-label="Blue" aria-pressed="false"></button>
+            <button type="button" class="color-option color-purple" data-color="purple" aria-label="Purple" aria-pressed="false"></button>
+          </div>
         </div>
       </div>
-      <div class="filter-row source-filter" id="source-filter"></div>
-      <div class="filter-row color-filter" id="color-filter"></div>
-      <div class="filter-row tag-filter" id="tag-filter"></div>
-    </div>
-    <div class="file-list" id="file-list">
-      <div class="empty-state">Loading library…</div>
-    </div>
-  </div>
-
-</div>
-
-<div class="now-playing" id="now-playing">
-  <div class="np-header">
-    <div class="np-info">
-      <div class="np-title" id="np-title">—</div>
-      <div class="np-meta" id="np-meta">&nbsp;</div>
-    </div>
-    <div class="np-time" id="np-time">0:00 / 0:00</div>
-  </div>
-  <div class="np-progress" id="np-progress">
-    <div class="np-progress-fill" id="np-progress-fill"></div>
-  </div>
-  <audio id="player" controls></audio>
-</div>
-
-<div class="modal-overlay" id="edit-modal">
-  <div class="glass modal-card">
-    <h3>Edit Track Info</h3>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>Tags (comma separated)</label>
-        <input type="text" id="modal-tags-input" placeholder="e.g. lo-fi, chill, favorite" autocomplete="off">
+      <div class="modal-actions">
+        <button id="modal-cancel-btn">Cancel</button>
+        <button id="modal-save-btn">Save</button>
       </div>
-      <div class="form-group">
-        <label>Color Marker</label>
-        <div class="color-picker" id="modal-color-picker">
-          <div class="color-option color-none selected" data-color="none" title="None"></div>
-          <div class="color-option color-red" data-color="red" title="Red"></div>
-          <div class="color-option color-orange" data-color="orange" title="Orange"></div>
-          <div class="color-option color-yellow" data-color="yellow" title="Yellow"></div>
-          <div class="color-option color-green" data-color="green" title="Green"></div>
-          <div class="color-option color-blue" data-color="blue" title="Blue"></div>
-          <div class="color-option color-purple" data-color="purple" title="Purple"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="preview-modal" inert aria-hidden="true">
+    <div class="glass modal-card preview-modal-card" role="dialog" aria-modal="true" aria-labelledby="preview-title" tabindex="-1">
+      <div class="preview-header">
+        <div class="preview-thumb" id="preview-thumb"></div>
+        <div class="preview-info">
+          <div class="preview-title" id="preview-title">—</div>
+          <div class="preview-artist" id="preview-artist"></div>
+          <div class="preview-meta-row">
+            <span class="preview-source" id="preview-source"></span>
+            <span class="preview-duration" id="preview-duration"></span>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="modal-actions">
-      <button id="modal-cancel-btn">Cancel</button>
-      <button id="modal-save-btn">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- Preview Modal -->
-<div class="modal-overlay" id="preview-modal">
-  <div class="glass modal-card preview-modal-card">
-    <div class="preview-header">
-      <div class="preview-thumb" id="preview-thumb"></div>
-      <div class="preview-info">
-        <div class="preview-title" id="preview-title">—</div>
-        <div class="preview-artist" id="preview-artist"></div>
-        <div class="preview-meta-row">
-          <span class="preview-source" id="preview-source"></span>
-          <span class="preview-duration" id="preview-duration"></span>
+      <div class="preview-player-section">
+        <div class="preview-loading hidden" id="preview-loading">
+          <svg class="loader-spinner" viewBox="0 0 50 50">
+            <circle class="loader-circle" cx="25" cy="25" r="20" fill="none" stroke="var(--accent-cyan)" stroke-width="4" stroke-linecap="round"/>
+          </svg>
+          <span>Loading preview…</span>
         </div>
+        <div class="preview-waveform" id="preview-waveform">
+          <div class="preview-waveform-fill" id="preview-waveform-fill"></div>
+        </div>
+        <div class="preview-time-row">
+          <span id="preview-current-time">0:00</span>
+          <span id="preview-total-time">0:00</span>
+        </div>
+        <div class="preview-controls">
+          <button type="button" class="preview-play-btn" id="preview-play-btn" title="Play/Pause" aria-label="Play preview">
+            <span class="play-icon">▶</span>
+          </button>
+        </div>
+        <audio id="preview-audio"></audio>
       </div>
-    </div>
-    <div class="preview-player-section">
-      <div class="preview-loading hidden" id="preview-loading">
-        <svg class="loader-spinner" viewBox="0 0 50 50">
-          <circle class="loader-circle" cx="25" cy="25" r="20" fill="none" stroke="var(--accent-cyan)" stroke-width="4" stroke-linecap="round"/>
-        </svg>
-        <span>Loading preview…</span>
+      <div class="modal-actions">
+        <button id="preview-close-btn">Close</button>
+        <button id="preview-pull-btn">Pull to Library</button>
       </div>
-      <div class="preview-waveform" id="preview-waveform">
-        <div class="preview-waveform-fill" id="preview-waveform-fill"></div>
-      </div>
-      <div class="preview-time-row">
-        <span id="preview-current-time">0:00</span>
-        <span id="preview-total-time">0:00</span>
-      </div>
-      <div class="preview-controls">
-        <button class="preview-play-btn" id="preview-play-btn" title="Play/Pause">
-          <span class="play-icon">▶</span>
-        </button>
-      </div>
-      <audio id="preview-audio"></audio>
-    </div>
-    <div class="modal-actions">
-      <button id="preview-close-btn">Close</button>
-      <button id="preview-pull-btn">Pull to Library</button>
     </div>
   </div>
-</div>
 
-<script src="renderer.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>
